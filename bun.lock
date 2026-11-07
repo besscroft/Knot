@@ -1,0 +1,27 @@
+{
+  "lockfileVersion": 2,
+  "configVersion": 1,
+  "workspaces": {
+    "": {
+      "name": "knot",
+      "devDependencies": {
+        "mygo-cli": "^0.8.0",
+      },
+    },
+  },
+  "packages": {
+    "@egoist/mygo-cli-darwin-arm64": ["@egoist/mygo-cli-darwin-arm64@0.8.0", "https://mirrors.cloud.tencent.com/npm/@egoist/mygo-cli-darwin-arm64/-/mygo-cli-darwin-arm64-0.8.0.tgz", { "os": "darwin", "cpu": "arm64" }, "sha512-RKgsmqqOcyaWteWeKhRWvolq4PblMjy4icEMScv8MAu6WgDSTgTJwtoPByl1w8eJfX/3zfSTT8ZRbNBlly8d1Q=="],
+
+    "@egoist/mygo-cli-darwin-x64": ["@egoist/mygo-cli-darwin-x64@0.8.0", "https://mirrors.cloud.tencent.com/npm/@egoist/mygo-cli-darwin-x64/-/mygo-cli-darwin-x64-0.8.0.tgz", { "os": "darwin", "cpu": "x64" }, "sha512-r5VOhQl+kD3sOpRI7fMaeYpvKS1rub819m/oQEUmDzMTY6E6goYIREpVMITpXSoQZu5VQOYI6TQywJ63UtjqOA=="],
+
+    "@egoist/mygo-cli-linux-arm64": ["@egoist/mygo-cli-linux-arm64@0.8.0", "https://mirrors.cloud.tencent.com/npm/@egoist/mygo-cli-linux-arm64/-/mygo-cli-linux-arm64-0.8.0.tgz", { "os": "linux", "cpu": "arm64" }, "sha512-IQKb839AbZ69+9lvxOf6L9gzxjhxOBxPyEjiAJEKqR9W5yPQnWOtxQqpU9ZJDa2gdHWWnzCzw01xi5QQB6NiKA=="],
+
+    "@egoist/mygo-cli-linux-x64": ["@egoist/mygo-cli-linux-x64@0.8.0", "https://mirrors.cloud.tencent.com/npm/@egoist/mygo-cli-linux-x64/-/mygo-cli-linux-x64-0.8.0.tgz", { "os": "linux", "cpu": "x64" }, "sha512-HUleCFlAKOlNcRKSYaJv4vCiPwjdo9s2R1FJY9mNEZsNv+z1CIC0OUGZS5me9T4VAFZiS9D8gQBVUxM03zTDmg=="],
+
+    "@egoist/mygo-cli-win32-arm64": ["@egoist/mygo-cli-win32-arm64@0.8.0", "https://mirrors.cloud.tencent.com/npm/@egoist/mygo-cli-win32-arm64/-/mygo-cli-win32-arm64-0.8.0.tgz", { "os": "win32", "cpu": "arm64" }, "sha512-L7okA0lTeXlbl1hm+2NZJPH8koxWASrnHu1Jm6fi8QI65C1FKZhVwzhrKvYJDVhxYS6U2JJ7Q0z2p3xdX9BLAw=="],
+
+    "@egoist/mygo-cli-win32-x64": ["@egoist/mygo-cli-win32-x64@0.8.0", "https://mirrors.cloud.tencent.com/npm/@egoist/mygo-cli-win32-x64/-/mygo-cli-win32-x64-0.8.0.tgz", { "os": "win32", "cpu": "x64" }, "sha512-PnMBi96+RPJ2R3xaZdI+OVQ94QCLZK8YUXyXJDQs1Qy/RNtWrcWhO6ZGxhiKFLe+pFYgq4Cv4ul/7IpaNy4RpA=="],
+
+    "mygo-cli": ["mygo-cli@0.8.0", "https://mirrors.cloud.tencent.com/npm/mygo-cli/-/mygo-cli-0.8.0.tgz", { "optionalDependencies": { "@egoist/mygo-cli-darwin-arm64": "0.8.0", "@egoist/mygo-cli-darwin-x64": "0.8.0", "@egoist/mygo-cli-linux-arm64": "0.8.0", "@egoist/mygo-cli-linux-x64": "0.8.0", "@egoist/mygo-cli-win32-arm64": "0.8.0", "@egoist/mygo-cli-win32-x64": "0.8.0" }, "bin": { "mygo": "bin/mygo.js" } }, "sha512-kcKQbLzPxTEoi8rZZFFcAfOupKFBD379thu3Nq30b+ttSb202vQV2QH8rbufnmTFZCYEkgRWQkyH3ggOypTZ6g=="],
+  }
+}

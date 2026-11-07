@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+.mygo/
+.zcode/
+mygo_windows_*.syso
+*.log
+.DS_Store
