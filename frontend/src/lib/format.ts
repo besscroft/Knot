@@ -46,15 +46,22 @@ export function mediaKindOf(name: string): "image" | "video" | "audio" | "other"
 }
 
 /**
- * mediaFileUrl / mediaThumbUrl 构造媒体服务地址。
- * WebView2 加载不了自定义 scheme：mygo 把 media://localhost/… 映射为
- * http://media.localhost/… 服务（schemehost），必须用 http 形式才能到达
- * Go 侧的 mediaHandler（media:// 形式的请求会被 WebView2 原样放行并失败）。
+ * 媒体服务地址。Go 侧起 loopback HTTP 服务器（127.0.0.1 随机端口 +
+ * 随机 token，见 internal/service/media.go），base 由 App.mediaBase()
+ * 在启动时拉取——不能用 mygo 自定义协议：Windows/WebView2 后端会把
+ * 自定义协议响应整体缓冲进内存，大视频一点播放就 OOM 闪退。
  */
+let mediaBase = "";
+
+/** setMediaBase 注入启动时从 Go 侧取到的媒体服务 base URL。 */
+export function setMediaBase(base: string) {
+  mediaBase = base.replace(/\/+$/, "");
+}
+
 export function mediaFileUrl(taskID: string): string {
-  return `http://media.localhost/file/${taskID}`;
+  return mediaBase ? `${mediaBase}/file/${taskID}` : "";
 }
 
 export function mediaThumbUrl(taskID: string): string {
-  return `http://media.localhost/thumb/${taskID}`;
+  return mediaBase ? `${mediaBase}/thumb/${taskID}` : "";
 }

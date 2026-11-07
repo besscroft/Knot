@@ -67,7 +67,7 @@ func Init() error {
 	// FFmpeg：设置指定路径 + 自动下载缓存目录。
 	engine.SetFfmpegOptions(settings.Get().FfmpegPath, filepath.Join(cacheDir, "ffmpeg"))
 
-	RegisterMediaProtocol() // media:// 文件与封面服务（须在窗口创建前注册）
+	StartMediaServer() // loopback 媒体服务：文件与封面（大文件必须真流式，见 media.go）
 
 	// 旧版本完成的媒体任务没有时长：后台逐个回填。
 	go func() {
@@ -87,6 +87,7 @@ func Shutdown() {
 	if mgr != nil {
 		mgr.Shutdown()
 	}
+	StopMediaServer()
 }
 
 // SetMainWindow 记录主窗口引用：注册窗口钩子（移动/缩放时同步站点与浮窗位置、

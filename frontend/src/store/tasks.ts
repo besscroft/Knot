@@ -1,5 +1,6 @@
 import { create } from "zustand";
-import { events, Tasks, type Task } from "../mygo";
+import { App, events, Tasks, type Task } from "../mygo";
+import { setMediaBase } from "../lib/format";
 
 interface TasksState {
   /** id → 任务快照 */
@@ -19,6 +20,12 @@ export const useTasks = create<TasksState>((set, get) => ({
   loaded: false,
 
   async init() {
+    // 媒体地址先就位：任务列表一到，卡片封面/播放链接立即可用。
+    try {
+      setMediaBase(await App.mediaBase());
+    } catch {
+      // 未就绪（不应发生）：媒体请求会失败，不影响任务列表。
+    }
     const tasks = await Tasks.list();
     set(() => {
       const byId: Record<string, Task> = {};

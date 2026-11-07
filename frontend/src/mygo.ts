@@ -238,6 +238,13 @@ export const App = {
   getSettings(): Promise<Settings> {
     return call("App.GetSettings");
   },
+  /**
+   * MediaBase 返回 loopback 媒体服务 base URL（含 token），前端用它拼
+   * 文件与封面地址；服务器未就绪时返回空串。
+   */
+  mediaBase(): Promise<string> {
+    return call("App.MediaBase");
+  },
   /** ParseURL 探测链接，返回可确认的预览信息。 */
   parseURL(url: string): Promise<Preview> {
     return call("App.ParseURL", url);

@@ -90,6 +90,16 @@ func (a *AppService) SaveSettings(v Settings) error {
 	return nil
 }
 
+// MediaBase 返回 loopback 媒体服务 base URL（含 token），前端用它拼
+// 文件与封面地址；服务器未就绪时返回空串。
+func (a *AppService) MediaBase() (string, error) {
+	base := MediaBase()
+	if base == "" {
+		return "", ErrNotReady
+	}
+	return base, nil
+}
+
 // PickFolder 弹出系统目录选择框；取消时返回空字符串。
 func (a *AppService) PickFolder(ctx context.Context) (string, error) {
 	dirs, err := mygo.Dialog.Open(mygo.OpenDialogOptions{

@@ -2,8 +2,11 @@ package service
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -17,44 +20,93 @@ import (
 	"github.com/egoist/mygo"
 )
 
-// 媒体协议：把已完成的任务文件与视频封面以 media:// 提供给前端，
-// 供已完成页卡片展示与应用内播放。http.ServeContent 自动处理
-// Range/206，视频拖动进度依赖它。handler 跑在独立 goroutine，可阻塞。
-const (
-	mediaScheme   = "media"
-	thumbCacheDir = "thumbs" // PathCache 下的封面缓存目录名
+// 媒体服务：把已完成的任务文件与视频封面提供给前端，供已完成页卡片
+// 展示与应用内播放。必须走 loopback HTTP（127.0.0.1 随机端口 + 随机
+// token 路径）而不是 mygo 自定义协议：Windows/WebView2 后端会把自定义
+// 协议的整个响应体缓冲进内存（schemeResponse "WebView2 wants it whole"），
+// 大视频一点播放就内存爆炸闪退；loopback 的 net/http 是真流式，
+// http.ServeContent 的 Range/206 拖动照常可用，全平台行为一致
+// （mygo 官方文档 frontend.md 对音视频正是这么建议的）。
+const thumbCacheDir = "thumbs" // PathCache 下的封面缓存目录名
+
+var (
+	mediaMu      sync.Mutex
+	mediaLn      net.Listener // loopback 监听；Shutdown 时关闭
+	mediaToken   string       // URL 首段随机 token：本机其他进程不可猜测
+	mediaBaseURL string       // 如 http://127.0.0.1:53462/<token>
 )
 
 var thumbMu sync.Mutex // 抽帧串行化：量小且比并发竞态简单
 
-// RegisterMediaProtocol 注册 media 协议；须在窗口创建之前调用。
-func RegisterMediaProtocol() {
-	if err := mygo.Protocol.HandleFunc(mediaScheme, mediaHandler); err != nil {
-		log.Println("注册 media 协议失败:", err)
+// StartMediaServer 启动 loopback 媒体服务器，并记录给前端的 base URL。
+func StartMediaServer() {
+	token := make([]byte, 16)
+	if _, err := rand.Read(token); err != nil {
+		log.Println("生成媒体 token 失败:", err)
+		return
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Println("启动媒体服务器失败:", err)
+		return
+	}
+	mediaMu.Lock()
+	mediaLn = ln
+	mediaToken = hex.EncodeToString(token)
+	mediaBaseURL = "http://" + ln.Addr().String() + "/" + mediaToken
+	mediaMu.Unlock()
+
+	go func() {
+		srv := &http.Server{Handler: http.HandlerFunc(mediaHandler)}
+		if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Println("媒体服务器退出:", err)
+		}
+	}()
+}
+
+// StopMediaServer 关闭 loopback 监听（进程退出也会自然释放）。
+func StopMediaServer() {
+	mediaMu.Lock()
+	defer mediaMu.Unlock()
+	if mediaLn != nil {
+		_ = mediaLn.Close()
+		mediaLn = nil
 	}
 }
 
-// mediaHandler 按 /file/<taskID> 与 /thumb/<taskID> 分发。
+// MediaBase 返回媒体服务 base URL（含 token），失败返回空串。
+func MediaBase() string {
+	mediaMu.Lock()
+	defer mediaMu.Unlock()
+	return mediaBaseURL
+}
+
+// mediaHandler 按 /<token>/file/<taskID> 与 /<token>/thumb/<taskID> 分发。
+// 鉴权只靠 token（loopback 上拿不到来源窗口）：token 每次启动随机生成、
+// 只经 IPC 给到应用自己的页面，猜不出来即不可访问。
 func mediaHandler(w http.ResponseWriter, r *http.Request) {
-	if !fromMainWindow(r) {
-		http.Error(w, "forbidden", http.StatusForbidden)
+	mediaMu.Lock()
+	token := mediaToken
+	mediaMu.Unlock()
+	if token == "" {
+		http.Error(w, "not ready", http.StatusServiceUnavailable)
+		return
+	}
+	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
+	if len(parts) != 3 || parts[0] != token || parts[2] == "" {
+		http.NotFound(w, r)
 		return
 	}
 	if mgr == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/"), "/")
-	if len(parts) != 2 || parts[1] == "" {
-		http.NotFound(w, r)
-		return
-	}
-	task, ok := mgr.Get(parts[1])
+	task, ok := mgr.Get(parts[2])
 	if !ok || task.Status != engine.StatusDone {
 		http.NotFound(w, r)
 		return
 	}
-	switch parts[0] {
+	switch parts[1] {
 	case "file":
 		serveTaskFile(w, r, task)
 	case "thumb":
@@ -62,14 +114,6 @@ func mediaHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		http.NotFound(w, r)
 	}
-}
-
-// fromMainWindow 只服务主窗口（应用自身页面）：站点窗口是 Untrusted 的，
-// 不能让它读取下载的文件。
-func fromMainWindow(r *http.Request) bool {
-	caller := mygo.CallerWindow(r.Context())
-	main := MainWindow()
-	return caller != nil && main != nil && caller == main
 }
 
 // serveTaskFile 直出任务的目标文件。
@@ -126,6 +170,8 @@ func serveThumb(w http.ResponseWriter, r *http.Request, task engine.Task) {
 		http.NotFound(w, r)
 		return
 	}
+	// 封面生成后不变，可放心缓存。
+	w.Header().Set("Cache-Control", "private, max-age=86400")
 	http.ServeContent(w, r, "thumb.jpg", st.ModTime(), f)
 }
 
