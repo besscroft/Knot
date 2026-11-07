@@ -21,7 +21,12 @@ type Settings struct {
 	AudioFormat   string   `json:"audioFormat"`   // 音频默认格式：m4a/mp3/opus/flac/wav，空 = m4a
 	FfmpegPath    string   `json:"ffmpegPath"`    // 手动指定 FFmpeg 路径，空 = 自动查找/下载
 	SniffTypes    []string `json:"sniffTypes"`    // 浏览嗅探允许的资源类型，全量见 AllSniffTypes
+	WebAccess     bool     `json:"webAccess"`     // Web 文件库：允许局域网设备访问（默认仅本机）
+	WebPort       int      `json:"webPort"`       // Web 文件库监听端口
 }
+
+// DefaultWebPort 是 Web 文件库的默认监听端口（本机与局域网共用）。
+const DefaultWebPort = 22333
 
 // AllSniffTypes 是嗅探资源类型的全量枚举，与 preload 脚本/嗅探面板的
 // type 值一致（info 聚合提示是合成条目，不可配置）。
@@ -102,6 +107,12 @@ func sanitizeSettings(v *Settings, defDir string) {
 	}
 	v.VideoFormat = strings.ToLower(v.VideoFormat)
 	v.AudioFormat = strings.ToLower(v.AudioFormat)
+
+	// Web 文件库：端口越界回默认（token 已移除，访问控制靠绑定地址 +
+	// Host 白名单，见 media.go）。
+	if v.WebPort < 1024 || v.WebPort > 65535 {
+		v.WebPort = DefaultWebPort
+	}
 
 	// 嗅探类型：剔除非法值并去重；空（含旧配置缺字段）= 全部。
 	allowed := make(map[string]bool, len(AllSniffTypes))

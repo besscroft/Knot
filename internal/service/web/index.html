@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="robots" content="noindex">
+<title>Knot 文件库</title>
+<style>
+  /* 设计令牌与 Knot 应用一致（frontend/src/index.css），跟随系统深浅色 */
+  :root {
+    --bg: #f7f8fa; --panel: #ffffff; --panel-2: #f1f2f5; --border: #e4e6ea;
+    --text: #1c1e21; --muted: #6b7280; --accent: #2563eb; --accent-soft: #dbeafe;
+    --danger: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #141414; --panel: #1d1d20; --panel-2: #26262b; --border: #323238;
+      --text: #e8e8ea; --muted: #9ca3af; --accent: #3b82f6; --accent-soft: #1e3a5f;
+      --danger: #ef4444;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px; -webkit-font-smoothing: antialiased;
+  }
+  header {
+    position: sticky; top: 0; z-index: 10; display: flex; align-items: center;
+    gap: 12px; padding: 12px 20px; background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 15px; }
+  .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  #search {
+    width: 200px; height: 32px; padding: 0 10px; font: inherit; color: var(--text);
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 8px; outline: none;
+  }
+  #search:focus { border-color: var(--accent); }
+  .icon-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--panel-2); color: var(--muted); cursor: pointer;
+  }
+  .icon-btn:hover { color: var(--text); }
+  .icon-btn.spin svg { animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  nav {
+    display: flex; gap: 8px; padding: 12px 20px 0;
+    max-width: 1400px; margin: 0 auto; width: 100%;
+  }
+  .chip {
+    height: 28px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 12px;
+    border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer;
+  }
+  .chip:hover { color: var(--text); }
+  .chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 14px; padding: 16px 20px 48px; max-width: 1400px; margin: 0 auto; width: 100%;
+  }
+  .card {
+    padding: 0; text-align: left; overflow: hidden; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    font: inherit; color: inherit;
+  }
+  .card:hover { border-color: var(--accent); }
+  .card.missing { opacity: 0.55; cursor: default; }
+  .card.missing:hover { border-color: var(--border); }
+  .thumb {
+    position: relative; aspect-ratio: 16 / 9; background: var(--panel-2);
+    display: flex; align-items: center; justify-content: center; color: var(--muted);
+  }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb .ph svg { width: 34px; height: 34px; }
+  .play {
+    position: absolute; width: 38px; height: 38px; border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .play svg { width: 18px; height: 18px; margin-left: 2px; }
+  .info { padding: 10px 12px 12px; }
+  .name {
+    font-size: 13px; font-weight: 500; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  .meta { margin-top: 4px; font-size: 12px; color: var(--muted); display: flex; gap: 6px; flex-wrap: wrap; }
+  .meta .miss { color: var(--danger); }
+  #state { padding: 60px 20px; text-align: center; color: var(--muted); }
+  #state.err { color: var(--danger); }
+  #state button {
+    margin-left: 8px; font: inherit; color: var(--accent);
+    background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline;
+  }
+  /* 预览浮层 */
+  #overlay {
+    position: fixed; inset: 0; z-index: 100; background: rgba(0, 0, 0, 0.55);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  #overlay[hidden] { display: none; }
+  .sheet {
+    width: min(920px, 96vw); max-height: 92vh; display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden;
+  }
+  .sheet-head {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sheet-head .name { flex: 1; font-size: 14px; font-weight: 500; }
+  .sheet-body { overflow: auto; background: var(--panel-2); display: flex; align-items: center; justify-content: center; min-height: 200px; }
+  .sheet-body video { width: 100%; max-height: 66vh; background: #000; }
+  .sheet-body img { max-width: 100%; max-height: 66vh; object-fit: contain; }
+  .sheet-body .center { padding: 40px 20px; text-align: center; color: var(--muted); width: 100%; }
+  .sheet-body .center svg { width: 44px; height: 44px; }
+  .sheet-body audio { width: min(560px, 90vw); margin: 40px 0; }
+  .hint { display: none; margin-top: 10px; font-size: 12px; color: var(--danger); }
+  .hint.show { display: block; }
+  .sheet-foot {
+    display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+    border-top: 1px solid var(--border); font-size: 12px; color: var(--muted);
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px;
+    border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2);
+    color: var(--text); font: inherit; font-size: 13px; cursor: pointer; text-decoration: none;
+  }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { opacity: 0.9; }
+  .btn svg { width: 15px; height: 15px; }
+  .spacer { flex: 1; }
+  @media (max-width: 560px) {
+    #search { width: 130px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><span class="dot"></span>Knot 文件库</div>
+  <div class="tools">
+    <input id="search" type="search" placeholder="搜索文件名…" autocomplete="off">
+    <button class="icon-btn" id="refresh" title="刷新">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+    </button>
+  </div>
+</header>
+<nav id="chips"></nav>
+<main>
+  <div id="grid" class="grid"></div>
+  <div id="state" hidden></div>
+</main>
+<div id="overlay" hidden></div>
+
+<script>
+"use strict";
+// 所有资源都在 token 路径下：直接以当前路径为 base（/<token>/）。
+const BASE = location.pathname.replace(/\/+$/, "");
+const KINDS = ["video", "audio", "image", "other"];
+const KIND_LABEL = { video: "视频", audio: "音频", image: "图片", other: "其他" };
+const ICON = {
+  video: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m10 9 5 3-5 3z" fill="currentColor" stroke="none"/></svg>',
+  audio: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></svg>',
+  image: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m5 19 5.5-5.5 3 3L17 13l4 4"/></svg>',
+  other: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.5v13l11-6.5z"/></svg>',
+  download: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="m7 11 5 5 5-5"/><path d="M4 21h16"/></svg>',
+  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+};
+const $ = (sel) => document.querySelector(sel);
+const state = { items: [], filter: "all", query: "", loading: false };
+
+const fileURL = (id, dl) => `${BASE}/file/${encodeURIComponent(id)}${dl ? "?dl=1" : ""}`;
+const thumbURL = (id) => `${BASE}/thumb/${encodeURIComponent(id)}`;
+
+/** formatBytes 与应用内 lib/format.ts 保持一致（未知传负数）。 */
+function formatBytes(n) {
+  if (n < 0) return "未知大小";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let v = n, i = 0;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  const digits = i === 0 ? 0 : v >= 100 ? 1 : 2;
+  return `${v.toFixed(digits)} ${units[i]}`;
+}
+/** formatDuration 与应用内一致（未知传非正数）。 */
+function formatDuration(sec) {
+  if (!(sec > 0)) return "";
+  const s = Math.round(sec);
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+  const ss = String(r).padStart(2, "0");
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleString(undefined, {
+    year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+async function load() {
+  state.loading = true;
+  renderState("加载中…");
+  try {
+    const res = await fetch(`${BASE}/api/list`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    state.items = await res.json();
+    state.loading = false;
+    render();
+  } catch (err) {
+    state.loading = false;
+    renderState(`无法加载文件列表（${err.message}）`, true);
+  }
+}
+
+function visible() {
+  const q = state.query.trim().toLowerCase();
+  return state.items.filter((it) =>
+    (state.filter === "all" || it.kind === state.filter) &&
+    (!q || (it.name || "").toLowerCase().includes(q)));
+}
+
+function render() {
+  renderChips();
+  const list = visible();
+  const grid = $("#grid");
+  grid.textContent = "";
+  grid.hidden = list.length === 0;
+  for (const it of list) grid.append(card(it));
+  if (list.length === 0) {
+    if (state.items.length === 0) renderState("还没有已完成的下载");
+    else renderState("没有匹配的文件");
+  } else {
+    $("#state").hidden = true;
+  }
+}
+
+function renderChips() {
+  const nav = $("#chips");
+  nav.textContent = "";
+  const counts = { all: state.items.length };
+  for (const k of KINDS) counts[k] = 0;
+  for (const it of state.items) counts[it.kind] = (counts[it.kind] || 0) + 1;
+  for (const k of ["all", ...KINDS]) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "chip" + (state.filter === k ? " on" : "");
+    b.textContent = (k === "all" ? "全部" : KIND_LABEL[k]) + " " + (counts[k] || 0);
+    b.onclick = () => { state.filter = k; render(); };
+    nav.append(b);
+  }
+  nav.hidden = state.items.length === 0;
+}
+
+function renderState(text, isErr) {
+  const el = $("#state");
+  el.hidden = false;
+  el.className = isErr ? "err" : "";
+  el.textContent = text;
+  if (isErr) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = "重试";
+    b.onclick = () => void load();
+    el.append(b);
+  }
+  $("#grid").hidden = true;
+}
+
+function metaOf(it) {
+  const parts = [];
+  if (it.missing) parts.push("文件已缺失");
+  else parts.push(formatBytes(it.size));
+  const dur = formatDuration(it.duration);
+  if (dur) parts.push(dur);
+  const date = fmtDate(it.completedAt);
+  if (date) parts.push(date);
+  return parts;
+}
+
+function card(it) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = "card" + (it.missing ? " missing" : "");
+
+  const thumb = document.createElement("div");
+  thumb.className = "thumb";
+  if (!it.missing && (it.kind === "video" || it.kind === "image")) {
+    const img = document.createElement("img");
+    img.loading = "lazy";
+    img.alt = "";
+    img.src = it.kind === "video" ? thumbURL(it.id) : fileURL(it.id);
+    img.onerror = () => { img.remove(); thumb.insertAdjacentHTML("beforeend", `<span class="ph">${ICON[it.kind] || ICON.other}</span>`); };
+    thumb.append(img);
+    if (it.kind === "video") thumb.insertAdjacentHTML("beforeend", `<span class="play">${ICON.play}</span>`);
+  } else {
+    thumb.insertAdjacentHTML("beforeend", `<span class="ph">${ICON[it.kind] || ICON.other}</span>`);
+  }
+  el.append(thumb);
+
+  const info = document.createElement("div");
+  info.className = "info";
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = it.name || it.id;
+  name.title = it.name || it.id;
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  for (const p of metaOf(it)) {
+    const s = document.createElement("span");
+    if (p === "文件已缺失") s.className = "miss";
+    s.textContent = p;
+    meta.append(s);
+  }
+  info.append(name, meta);
+  el.append(info);
+
+  if (!it.missing) el.onclick = () => openItem(it);
+  return el;
+}
+
+function openItem(it) {
+  const ov = $("#overlay");
+  ov.textContent = "";
+  const sheet = document.createElement("div");
+  sheet.className = "sheet";
+
+  const head = document.createElement("div");
+  head.className = "sheet-head";
+  const name = document.createElement("div");
+  name.className = "name";
+  name.textContent = it.name || it.id;
+  const close = document.createElement("button");
+  close.type = "button";
+  close.className = "icon-btn";
+  close.title = "关闭";
+  close.innerHTML = ICON.close;
+  close.onclick = () => closeItem();
+  head.append(name, close);
+
+  const body = document.createElement("div");
+  body.className = "sheet-body";
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "浏览器无法直接解码此格式，可下载后用本地播放器打开。";
+  if (it.kind === "video") {
+    const v = document.createElement("video");
+    v.controls = true;
+    v.autoplay = true;
+    v.playsInline = true;
+    v.src = fileURL(it.id);
+    v.onerror = () => hint.classList.add("show");
+    body.append(v);
+  } else if (it.kind === "audio") {
+    const center = document.createElement("div");
+    center.className = "center";
+    center.insertAdjacentHTML("beforeend", ICON.audio);
+    const a = document.createElement("audio");
+    a.controls = true;
+    a.autoplay = true;
+    a.src = fileURL(it.id);
+    a.onerror = () => hint.classList.add("show");
+    center.append(a);
+    body.append(center);
+  } else if (it.kind === "image") {
+    const img = document.createElement("img");
+    img.src = fileURL(it.id);
+    img.alt = it.name || "";
+    img.onerror = () => hint.classList.add("show");
+    body.append(img);
+  } else {
+    const center = document.createElement("div");
+    center.className = "center";
+    center.insertAdjacentHTML("beforeend", ICON.other);
+    const p = document.createElement("div");
+    p.textContent = "此类型不支持在线预览，可下载后打开。";
+    center.append(p);
+    body.append(center);
+  }
+  body.append(hint);
+
+  const foot = document.createElement("div");
+  foot.className = "sheet-foot";
+  const meta = document.createElement("span");
+  meta.textContent = metaOf(it).join(" · ");
+  const sp = document.createElement("span");
+  sp.className = "spacer";
+  const dl = document.createElement("a");
+  dl.className = "btn primary";
+  dl.href = fileURL(it.id, true);
+  dl.download = it.name || it.id;
+  dl.innerHTML = ICON.download + "<span>下载</span>";
+  foot.append(meta, sp, dl);
+
+  sheet.append(head, body, foot);
+  ov.append(sheet);
+  ov.hidden = false;
+  ov.onclick = (e) => { if (e.target === ov) closeItem(); };
+}
+
+function closeItem() {
+  const ov = $("#overlay");
+  ov.hidden = true;
+  ov.textContent = ""; // 移除媒体元素即停止播放与加载
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeItem();
+});
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && state.items.length >= 0 && !state.loading) void load();
+});
+$("#search").addEventListener("input", (e) => { state.query = e.target.value; render(); });
+$("#refresh").addEventListener("click", (e) => {
+  const b = e.currentTarget;
+  b.classList.add("spin");
+  void load().finally(() => b.classList.remove("spin"));
+});
+
+void load();
+</script>
+</body>
+</html>

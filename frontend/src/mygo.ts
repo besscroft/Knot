@@ -103,6 +103,10 @@ export interface Settings {
   ffmpegPath: string;
   /** 浏览嗅探允许的资源类型，全量见 AllSniffTypes */
   sniffTypes: string[];
+  /** Web 文件库：允许局域网设备访问（默认仅本机） */
+  webAccess: boolean;
+  /** Web 文件库监听端口 */
+  webPort: number;
 }
 
 /**
@@ -197,9 +201,9 @@ export const Tasks = {
   pause(id: string): Promise<void> {
     return call("Tasks.Pause", id);
   },
-  /** Remove 删除任务记录并清理断点文件（保留已下载的文件）。 */
-  remove(id: string): Promise<void> {
-    return call("Tasks.Remove", id);
+  /** Remove 删除任务记录并清理断点文件；deleteFiles 为真时连同磁盘上的目标文件一并删除。 */
+  remove(id: string, deleteFiles: boolean): Promise<void> {
+    return call("Tasks.Remove", id, deleteFiles);
   },
   /** Resume 恢复 paused 或 error 状态的任务。 */
   resume(id: string): Promise<void> {
@@ -253,9 +257,19 @@ export const App = {
   pickFolder(): Promise<string> {
     return call("App.PickFolder");
   },
-  /** SaveSettings 保存设置，并同步队列并发数、下载代理与 FFmpeg 配置。 */
+  /**
+   * SaveSettings 保存设置，并同步队列并发数、下载代理、FFmpeg 配置与
+   * Web 文件库监听。
+   */
   saveSettings(v: Settings): Promise<void> {
     return call("App.SaveSettings", v);
+  },
+  /**
+   * WebURL 返回 Web 文件库页面地址，设置页提示文案展示用；服务器未就绪
+   * 时返回错误。
+   */
+  webURL(): Promise<string> {
+    return call("App.WebURL");
   },
 } as const;
 

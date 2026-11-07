@@ -71,11 +71,13 @@ func (a *AppService) GetSettings() (Settings, error) {
 	return settings.Get(), nil
 }
 
-// SaveSettings 保存设置，并同步队列并发数、下载代理与 FFmpeg 配置。
+// SaveSettings 保存设置，并同步队列并发数、下载代理、FFmpeg 配置与
+// Web 文件库监听。
 func (a *AppService) SaveSettings(v Settings) error {
 	if settings == nil || mgr == nil {
 		return ErrNotReady
 	}
+	old := settings.Get()
 	// 先应用代理（含校验），失败则不落盘。
 	if err := httpdl.SetProxy(v.Proxy); err != nil {
 		return err
@@ -87,6 +89,9 @@ func (a *AppService) SaveSettings(v Settings) error {
 	cacheDir, _ := mygo.App.Path(mygo.PathCache)
 	engine.SetFfmpegOptions(v.FfmpegPath, filepath.Join(cacheDir, "ffmpeg"))
 	UpdateSniffConfig() // 嗅探类型白名单即时推送给站点页面
+	if old.WebAccess != v.WebAccess || old.WebPort != v.WebPort {
+		RestartMediaServer() // 监听方式/端口变了：重启媒体服务器（含 Web 文件库）
+	}
 	return nil
 }
 
@@ -98,6 +103,16 @@ func (a *AppService) MediaBase() (string, error) {
 		return "", ErrNotReady
 	}
 	return base, nil
+}
+
+// WebURL 返回 Web 文件库页面地址，设置页提示文案展示用；服务器未就绪
+// 时返回错误。
+func (a *AppService) WebURL() (string, error) {
+	u := WebPageURL()
+	if u == "" {
+		return "", ErrNotReady
+	}
+	return u, nil
 }
 
 // PickFolder 弹出系统目录选择框；取消时返回空字符串。

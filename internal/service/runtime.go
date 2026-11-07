@@ -53,6 +53,11 @@ func Init() error {
 	if err != nil {
 		return err
 	}
+	// 把 sanitize 补齐的默认值（如 webPort）立即落盘，早于任何前端保存，
+	// 设置文件与实际生效值保持一致（顺带清掉历史遗留的废弃字段）。
+	if err := settings.Set(settings.Get()); err != nil {
+		log.Println("落盘初始化设置失败:", err)
+	}
 
 	store := engine.NewStore(filepath.Join(userData, "tasks.json"))
 	mgr = engine.NewManager(store, settings.Get().MaxConcurrent)

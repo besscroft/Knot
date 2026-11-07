@@ -230,15 +230,23 @@ func (t *Tasks) Resume(id string) error {
 	return mgr.Resume(id)
 }
 
-// Remove 删除任务记录并清理断点文件（保留已下载的文件）。
-func (t *Tasks) Remove(id string) error {
+// Remove 删除任务记录并清理断点文件；deleteFiles 为真时连同磁盘上的目标文件一并删除。
+func (t *Tasks) Remove(id string, deleteFiles bool) error {
 	if mgr == nil {
 		return ErrNotReady
+	}
+	task, ok := mgr.Get(id)
+	if !ok {
+		return fmt.Errorf("任务不存在: %s", id)
 	}
 	if err := mgr.Remove(id); err != nil {
 		return err
 	}
 	removeThumb(id) // 封面缓存一并清理
+	if deleteFiles {
+		// 记录已删除，文件若正被占用等删不掉时尽力而为，不阻塞前端移除记录。
+		_ = os.Remove(task.Path())
+	}
 	return nil
 }
 

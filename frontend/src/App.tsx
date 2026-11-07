@@ -3,6 +3,7 @@ import { useTasks } from "./store/tasks";
 import { TaskList, TaskGrid } from "./components/TaskItem";
 import { MediaViewer } from "./components/MediaViewer";
 import { TaskDetail } from "./components/TaskDetail";
+import { RemoveDialog } from "./components/RemoveDialog";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { SettingsView } from "./views/Settings";
 import { BrowserView } from "./views/Browser";
@@ -37,6 +38,8 @@ export default function App() {
   const [playing, setPlaying] = useState<Task | null>(null);
   // 任务详情弹窗：存任务 ID，渲染时从 store 取最新对象（广播自动跟随）。
   const [detailId, setDetailId] = useState<string | null>(null);
+  // 删除确认弹窗：询问是否连同磁盘文件一并删除。
+  const [removingId, setRemovingId] = useState<string | null>(null);
 
   function switchDoneView(v: "cards" | "list") {
     setDoneView(v);
@@ -63,6 +66,8 @@ export default function App() {
   const list: Task[] = order.map((id) => tasks[id]);
   // 详情弹窗渲染的是 store 里的最新任务对象，广播更新自动跟随。
   const detailTask = detailId ? (tasks[detailId] ?? null) : null;
+  const removingTask = removingId ? (tasks[removingId] ?? null) : null;
+  const removeTask = (t: Task) => setRemovingId(t.id);
   const active = list.filter((t) => t.status !== "done");
   const done = list.filter((t) => t.status === "done");
   const running = list.filter((t) => t.status === "running");
@@ -211,6 +216,7 @@ export default function App() {
                     emptyHint="点击右上角「新建下载」开始"
                     emptyIcon={<IconDownload className="size-10 opacity-40" />}
                     onDetail={(t) => setDetailId(t.id)}
+                    onRemove={removeTask}
                   />
                 ) : doneView === "cards" ? (
                   done.length === 0 ? (
@@ -219,7 +225,7 @@ export default function App() {
                       icon={<IconCheck className="size-10 opacity-40" />}
                     />
                   ) : (
-                    <TaskGrid tasks={done} onPlay={setPlaying} />
+                    <TaskGrid tasks={done} onPlay={setPlaying} onRemove={removeTask} />
                   )
                 ) : (
                   <TaskList
@@ -227,6 +233,7 @@ export default function App() {
                     emptyText="还没有完成的下载"
                     emptyIcon={<IconCheck className="size-10 opacity-40" />}
                     onDetail={(t) => setDetailId(t.id)}
+                    onRemove={removeTask}
                   />
                 ))}
             </div>
@@ -236,6 +243,13 @@ export default function App() {
 
       <NewTaskDialog open={newDialog} onClose={() => setNewDialog(false)} />
       {playing && <MediaViewer task={playing} onClose={() => setPlaying(null)} />}
+      {removingTask && (
+        <RemoveDialog
+          key={removingTask.id}
+          task={removingTask}
+          onClose={() => setRemovingId(null)}
+        />
+      )}
       {detailTask && (
         <TaskDetail key={detailTask.id} task={detailTask} onClose={() => setDetailId(null)} />
       )}

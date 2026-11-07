@@ -10,7 +10,6 @@ import {
   mediaThumbUrl,
 } from "../lib/format";
 import { cn } from "../lib/utils";
-import { useTasks } from "../store/tasks";
 import {
   IconCheck,
   IconFile,
@@ -44,8 +43,15 @@ export function statusColor(status: Task["status"]) {
 }
 
 /** TaskItem：一行任务的完整展示与操作（点击主体打开详情）。 */
-export function TaskItem({ task, onDetail }: { task: Task; onDetail?: (t: Task) => void }) {
-  const removeLocal = useTasks((s) => s.removeLocal);
+export function TaskItem({
+  task,
+  onDetail,
+  onRemove,
+}: {
+  task: Task;
+  onDetail?: (t: Task) => void;
+  onRemove: (t: Task) => void;
+}) {
   const running = task.status === "running";
   const isHLS = task.kind === "hls";
   const segFraction =
@@ -121,9 +127,7 @@ export function TaskItem({ task, onDetail }: { task: Task; onDetail?: (t: Task) 
         <IconButton
           title="删除任务"
           className="hover:text-danger"
-          onClick={() => {
-            void Tasks.remove(task.id).then(() => removeLocal(task.id));
-          }}
+          onClick={() => onRemove(task)}
         >
           <IconTrash className="size-4" />
         </IconButton>
@@ -139,12 +143,14 @@ export function TaskList({
   emptyHint,
   emptyIcon,
   onDetail,
+  onRemove,
 }: {
   tasks: Task[];
   emptyText: string;
   emptyHint?: string;
   emptyIcon?: ReactNode;
   onDetail?: (t: Task) => void;
+  onRemove: (t: Task) => void;
 }) {
   if (tasks.length === 0) {
     return <EmptyState icon={emptyIcon} text={emptyText} hint={emptyHint} />;
@@ -152,26 +158,41 @@ export function TaskList({
   return (
     <div className="rounded-lg border border-border bg-panel">
       {tasks.map((t) => (
-        <TaskItem key={t.id} task={t} onDetail={onDetail} />
+        <TaskItem key={t.id} task={t} onDetail={onDetail} onRemove={onRemove} />
       ))}
     </div>
   );
 }
 
 /** TaskGrid：已完成任务的卡片网格（封面/时长/点击播放）。 */
-export function TaskGrid({ tasks, onPlay }: { tasks: Task[]; onPlay: (t: Task) => void }) {
+export function TaskGrid({
+  tasks,
+  onPlay,
+  onRemove,
+}: {
+  tasks: Task[];
+  onPlay: (t: Task) => void;
+  onRemove: (t: Task) => void;
+}) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
       {tasks.map((t) => (
-        <TaskCard key={t.id} task={t} onPlay={onPlay} />
+        <TaskCard key={t.id} task={t} onPlay={onPlay} onRemove={onRemove} />
       ))}
     </div>
   );
 }
 
 /** TaskCard：单个已完成任务的媒体卡片。 */
-export function TaskCard({ task, onPlay }: { task: Task; onPlay: (t: Task) => void }) {
-  const removeLocal = useTasks((s) => s.removeLocal);
+export function TaskCard({
+  task,
+  onPlay,
+  onRemove,
+}: {
+  task: Task;
+  onPlay: (t: Task) => void;
+  onRemove: (t: Task) => void;
+}) {
   const kind = mediaKindOf(task.name);
   const playable = kind === "video" || kind === "audio";
   const when = task.completedAt
@@ -182,10 +203,6 @@ export function TaskCard({ task, onPlay }: { task: Task; onPlay: (t: Task) => vo
         minute: "2-digit",
       })
     : "";
-
-  function remove() {
-    void Tasks.remove(task.id).then(() => removeLocal(task.id));
-  }
 
   return (
     <div className="group overflow-hidden rounded-lg border border-border bg-panel transition-colors hover:border-accent/50">
@@ -243,7 +260,7 @@ export function TaskCard({ task, onPlay }: { task: Task; onPlay: (t: Task) => vo
             <IconButton title="在文件夹中显示" className="size-6" onClick={() => void Tasks.reveal(task.id)}>
               <IconFolder className="size-3.5" />
             </IconButton>
-            <IconButton title="删除任务" className="size-6 hover:text-danger" onClick={remove}>
+            <IconButton title="删除任务" className="size-6 hover:text-danger" onClick={() => onRemove(task)}>
               <IconTrash className="size-3.5" />
             </IconButton>
           </div>

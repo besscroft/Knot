@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { App, type Settings as SettingsData } from "../mygo";
 import { Button, Input } from "../components/ui";
+import { setMediaBase } from "../lib/format";
 
 /** 嗅探资源类型枚举，与后端 AllSniffTypes / 嗅探面板的 type 值一致。 */
 const SNIFF_TYPES: { value: string; label: string }[] = [
@@ -14,7 +15,7 @@ const SNIFF_TYPES: { value: string; label: string }[] = [
   { value: "other", label: "其他" },
 ];
 
-/** 设置页：下载目录、分片数、并发数、格式与 FFmpeg。 */
+/** 设置页：下载目录、分片数、并发数、格式、FFmpeg 与 Web 文件库。 */
 export function SettingsView() {
   const [data, setData] = useState<SettingsData | null>(null);
   const [dirty, setDirty] = useState(false);
@@ -24,6 +25,7 @@ export function SettingsView() {
   const [ffmpegPath, setFfmpegPath] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [downloadingFfmpeg, setDownloadingFfmpeg] = useState(false);
+  const [webURL, setWebURL] = useState("");
 
   useEffect(() => {
     App.getSettings()
@@ -33,7 +35,20 @@ export function SettingsView() {
       .then((p) => setFfmpegPath(p || null))
       .catch(() => setFfmpegPath(null))
       .finally(() => setChecking(false));
+    App.webURL()
+      .then(setWebURL)
+      .catch(() => setWebURL(""));
   }, []);
+
+  // 拉取最新媒体服务地址（监听方式/端口变化重启后调用）。
+  function refreshMedia() {
+    App.mediaBase()
+      .then(setMediaBase)
+      .catch(() => {});
+    App.webURL()
+      .then(setWebURL)
+      .catch(() => setWebURL(""));
+  }
 
   async function fetchFfmpeg() {
     setDownloadingFfmpeg(true);
@@ -76,6 +91,7 @@ export function SettingsView() {
       await App.saveSettings(data);
       setDirty(false);
       setSaved(true);
+      refreshMedia(); // Web 监听方式/端口可能已变化，刷新媒体与文件库地址
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -184,6 +200,37 @@ export function SettingsView() {
             >
               {downloadingFfmpeg ? "下载中…" : "获取 FFmpeg"}
             </Button>
+          </div>
+        </Row>
+
+        <Row
+          label="Web 文件库"
+          hint={
+            data.webAccess
+              ? webURL
+                ? `手机等设备在浏览器访问 ${webURL} 即可查看、播放与下载已完成的文件；连接为明文 HTTP，请仅在可信网络开启，首次可能需允许系统防火墙`
+                : "开启后同一网络内的设备（如手机）在浏览器输入本机 IP 与端口即可直接访问"
+              : `关闭时仅本机可访问 http://127.0.0.1:${data.webPort}/，应用内播放不受影响`
+          }
+        >
+          <div className="flex items-center gap-3">
+            <label className="flex cursor-pointer items-center gap-1.5 text-xs">
+              <input
+                type="checkbox"
+                className="size-3.5 accent-[var(--accent)]"
+                checked={data.webAccess}
+                onChange={(e) => update({ webAccess: e.target.checked })}
+              />
+              局域网访问
+            </label>
+            <Input
+              type="number"
+              min={1024}
+              max={65535}
+              value={data.webPort}
+              onChange={(e) => update({ webPort: Number(e.target.value) })}
+              className="w-24"
+            />
           </div>
         </Row>
 
