@@ -22,6 +22,7 @@ type CreateOptions struct {
 	Dir     string `json:"dir,omitempty"`     // 保存目录，空 = 设置里的下载目录
 	Name    string `json:"name,omitempty"`    // 文件名，空 = 从响应/URL 推断
 	Threads int    `json:"threads,omitempty"` // 分片数，0 = 用设置
+	Format  string `json:"format,omitempty"`  // 目标格式，空 = 用设置默认/原样
 	// 浏览上下文：应用内浏览器创建任务时携带，规避防盗链。
 	Referer   string `json:"referer,omitempty"`
 	Cookie    string `json:"cookie,omitempty"`
@@ -71,9 +72,15 @@ func createTask(ctx context.Context, url string, opt CreateOptions) (engine.Task
 		return createHLSTask(ctx, probe, dir, opt)
 	}
 
+	media := classifyMedia(probe.ContentType, probe.URL, "http")
+	format := resolveFormat(opt.Format, media, s)
+
 	name := opt.Name
 	if name == "" {
 		name = probe.FileName
+	}
+	if format != "" {
+		name = swapExt(name, format)
 	}
 	name = uniqueName(dir, name)
 
@@ -88,10 +95,60 @@ func createTask(ctx context.Context, url string, opt CreateOptions) (engine.Task
 		Dir:       dir,
 		Total:     probe.Size,
 		Threads:   threads,
+		Format:    format,
 		Referer:   opt.Referer,
 		Cookie:    opt.Cookie,
 		UserAgent: opt.UserAgent,
 	})
+}
+
+// classifyMedia 从 Content-Type/URL 推断媒体类别（video/audio/other）。
+func classifyMedia(contentType, rawURL, kind string) string {
+	if kind == "hls" {
+		return "video"
+	}
+	mt := strings.ToLower(contentType)
+	switch {
+	case strings.HasPrefix(mt, "video/"):
+		return "video"
+	case strings.HasPrefix(mt, "audio/"):
+		return "audio"
+	}
+	ext := strings.ToLower(strings.TrimPrefix(path.Ext(strings.Split(rawURL, "?")[0]), "."))
+	switch ext {
+	case "mp4", "mkv", "mov", "webm", "avi", "flv", "ts", "m4v":
+		return "video"
+	case "mp3", "m4a", "aac", "flac", "wav", "opus", "ogg":
+		return "audio"
+	}
+	return "other"
+}
+
+// resolveFormat 决定任务的目标格式：显式指定 > 设置默认（按媒体类别）> 原样。
+func resolveFormat(explicit, media string, s Settings) string {
+	f := strings.ToLower(strings.TrimSpace(explicit))
+	if f != "" && engine.SupportedFormats[f] {
+		return f
+	}
+	switch media {
+	case "audio":
+		return s.AudioFormat
+	case "video":
+		return s.VideoFormat
+	}
+	return ""
+}
+
+// swapExt 把文件名的扩展名换成目标格式。
+func swapExt(name, format string) string {
+	if format == "" {
+		return name
+	}
+	base := name
+	if i := strings.LastIndexByte(name, '.'); i > 0 && i > len(name)-8 {
+		base = name[:i]
+	}
+	return base + "." + format
 }
 
 // createHLSTask 解析 master playlist 并登记 HLS 任务。
@@ -101,21 +158,26 @@ func createHLSTask(ctx context.Context, probe *httpdl.ProbeResult, dir string, o
 		return engine.Task{}, err
 	}
 
+	s := settings.Get()
+	format := resolveFormat(opt.Format, "video", s)
+	if format == "" {
+		format = "mp4" // HLS 必须落一个容器
+	}
+
 	name := opt.Name
 	if name == "" {
-		// index.m3u8 这类名字没有信息量：去掉扩展名换成 .mp4。
+		// index.m3u8 这类名字没有信息量：去掉扩展名换目标容器。
 		base := path.Base(strings.Split(probe.URL, "?")[0])
 		name = strings.TrimSuffix(base, path.Ext(base))
 		if name == "" || name == "/" || name == "." {
 			name = "video"
 		}
-		name += ".mp4"
-	} else if !strings.HasSuffix(strings.ToLower(name), ".mp4") {
-		name = strings.TrimSuffix(name, path.Ext(name)) + ".mp4"
+		name += "." + format
+	} else {
+		name = swapExt(name, format)
 	}
 	name = uniqueName(dir, name)
 
-	s := settings.Get()
 	threads := opt.Threads
 	if threads == 0 {
 		threads = s.Threads
@@ -128,6 +190,7 @@ func createHLSTask(ctx context.Context, probe *httpdl.ProbeResult, dir string, o
 		Dir:       dir,
 		Total:     -1, // 分片总大小未知，进度按分片数展示
 		Threads:   threads,
+		Format:    format,
 		Referer:   opt.Referer,
 		Cookie:    opt.Cookie,
 		UserAgent: opt.UserAgent,
@@ -140,6 +203,15 @@ func (t *Tasks) List() ([]engine.Task, error) {
 		return nil, ErrNotReady
 	}
 	return mgr.List(), nil
+}
+
+// Shards 返回任务最近的分片快照（任务详情框每秒轮询）。
+// 仅 http 多线程任务有数据；HLS 返回空（用任务上的分片聚合计数）。
+func (t *Tasks) Shards(id string) ([]engine.ShardDetail, error) {
+	if mgr == nil {
+		return nil, ErrNotReady
+	}
+	return mgr.Shards(id), nil
 }
 
 // Pause 暂停任务。
@@ -163,7 +235,11 @@ func (t *Tasks) Remove(id string) error {
 	if mgr == nil {
 		return ErrNotReady
 	}
-	return mgr.Remove(id)
+	if err := mgr.Remove(id); err != nil {
+		return err
+	}
+	removeThumb(id) // 封面缓存一并清理
+	return nil
 }
 
 // OpenPath 用系统默认程序打开任务的目标文件。

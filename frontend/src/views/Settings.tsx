@@ -2,13 +2,50 @@ import { useEffect, useState } from "react";
 import { App, type Settings as SettingsData } from "../mygo";
 import { Button, Input } from "../components/ui";
 
-/** 设置页：下载目录、分片数、并发数。 */
+/** 嗅探资源类型枚举，与后端 AllSniffTypes / 嗅探面板的 type 值一致。 */
+const SNIFF_TYPES: { value: string; label: string }[] = [
+  { value: "hls", label: "HLS" },
+  { value: "video", label: "视频" },
+  { value: "audio", label: "音频" },
+  { value: "image", label: "图片" },
+  { value: "archive", label: "压缩包" },
+  { value: "document", label: "文档" },
+  { value: "link", label: "链接" },
+  { value: "other", label: "其他" },
+];
+
+/** 设置页：下载目录、分片数、并发数、格式与 FFmpeg。 */
 export function SettingsView() {
   const [data, setData] = useState<SettingsData | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [ffmpegPath, setFfmpegPath] = useState<string | null>(null);
+  const [checking, setChecking] = useState(true);
+  const [downloadingFfmpeg, setDownloadingFfmpeg] = useState(false);
+
+  useEffect(() => {
+    App.getSettings()
+      .then(setData)
+      .catch((err) => setError(String(err)));
+    App.checkFfmpeg()
+      .then((p) => setFfmpegPath(p || null))
+      .catch(() => setFfmpegPath(null))
+      .finally(() => setChecking(false));
+  }, []);
+
+  async function fetchFfmpeg() {
+    setDownloadingFfmpeg(true);
+    try {
+      const p = await App.downloadFfmpeg();
+      setFfmpegPath(p);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloadingFfmpeg(false);
+    }
+  }
 
   useEffect(() => {
     App.getSettings()
@@ -29,6 +66,10 @@ export function SettingsView() {
 
   async function save() {
     if (!data) return;
+    if (!data.sniffTypes || data.sniffTypes.length === 0) {
+      setError("嗅探资源类型至少勾选一项");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -89,6 +130,82 @@ export function SettingsView() {
             onChange={(e) => update({ proxy: e.target.value })}
             className="w-72"
           />
+        </Row>
+
+        <Row label="视频默认格式" hint="新建视频任务未选择时的默认容器">
+          <select
+            value={data.videoFormat}
+            onChange={(e) => update({ videoFormat: e.target.value })}
+            className="h-8 rounded-md border border-border bg-panel px-2 text-sm text-text focus:border-accent focus:outline-none"
+          >
+            <option value="">MP4（默认）</option>
+            <option value="mkv">MKV</option>
+            <option value="mov">MOV</option>
+            <option value="webm">WebM（需源编码兼容）</option>
+          </select>
+        </Row>
+
+        <Row label="音频默认格式" hint="纯音频链接未选择时的默认格式">
+          <select
+            value={data.audioFormat}
+            onChange={(e) => update({ audioFormat: e.target.value })}
+            className="h-8 rounded-md border border-border bg-panel px-2 text-sm text-text focus:border-accent focus:outline-none"
+          >
+            <option value="">不转换（原样保存）</option>
+            <option value="m4a">M4A</option>
+            <option value="mp3">MP3</option>
+            <option value="opus">Opus</option>
+            <option value="flac">FLAC</option>
+            <option value="wav">WAV</option>
+          </select>
+        </Row>
+
+        <Row
+          label="FFmpeg"
+          hint={
+            ffmpegPath
+              ? `已就绪：${ffmpegPath}`
+              : checking
+                ? "检测中…"
+                : "未安装。格式转换需要它，点击「获取 FFmpeg」自动下载并校验（约 80 MB，仅首次）"
+          }
+        >
+          <div className="flex items-center gap-2">
+            <Input
+              placeholder="手动指定 ffmpeg 路径（可选）"
+              value={data.ffmpegPath}
+              onChange={(e) => update({ ffmpegPath: e.target.value })}
+              className="w-56"
+            />
+            <Button
+              variant="secondary"
+              onClick={() => void fetchFfmpeg()}
+              disabled={downloadingFfmpeg || !!ffmpegPath}
+            >
+              {downloadingFfmpeg ? "下载中…" : "获取 FFmpeg"}
+            </Button>
+          </div>
+        </Row>
+
+        <Row label="嗅探资源类型" hint="内置浏览器只收集勾选的类型，保存后即时生效（至少一项）">
+          <div className="flex w-64 flex-wrap gap-x-3 gap-y-1.5">
+            {SNIFF_TYPES.map((t) => (
+              <label key={t.value} className="flex cursor-pointer items-center gap-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  className="size-3.5 accent-[var(--accent)]"
+                  checked={data.sniffTypes.includes(t.value)}
+                  onChange={(e) => {
+                    const next = e.target.checked
+                      ? [...data.sniffTypes, t.value]
+                      : data.sniffTypes.filter((v) => v !== t.value);
+                    update({ sniffTypes: next });
+                  }}
+                />
+                {t.label}
+              </label>
+            ))}
+          </div>
         </Row>
 
         {error && <div className="text-xs text-danger">{error}</div>}

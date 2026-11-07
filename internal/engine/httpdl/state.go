@@ -18,6 +18,9 @@ type Segment struct {
 	Start   int64 `json:"start"`
 	End     int64 `json:"end"` // 闭区间；-1 表示未定长的单流下载
 	Written int64 `json:"written"`
+	// 实时状态（不入盘，仅经 downloader 的快照暴露给上层）：
+	Active   bool `json:"-"` // 正在有连接传输
+	Retrying int  `json:"-"` // 当前重试轮次，0 = 首次尝试
 }
 
 // Remaining 返回该分片剩余字节数；未定长时返回 -1。

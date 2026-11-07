@@ -38,6 +38,8 @@ type Options struct {
 	Headers *Headers
 	// OnProgress 约每 progressInterval 回调一次 (downloaded, total)；可为 nil。
 	OnProgress func(downloaded, total int64)
+	// OnShards 与 OnProgress 同节奏回调分片快照（含实时传输状态）；可为 nil。
+	OnShards func([]Segment)
 }
 
 // Download 把 rawURL 下载到 path。
@@ -219,10 +221,22 @@ func (d *downloader) fetchSegment(ctx context.Context, seg *Segment) error {
 	const maxAttempts = 12
 	backoff := 500 * time.Millisecond
 	var lastErr error
+	d.mu.Lock()
+	seg.Active = true
+	d.mu.Unlock()
+	defer func() {
+		d.mu.Lock()
+		seg.Active = false
+		seg.Retrying = 0
+		d.mu.Unlock()
+	}()
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
+		d.mu.Lock()
+		seg.Retrying = attempt
+		d.mu.Unlock()
 		err := d.trySegment(ctx, seg)
 		if err == nil {
 			return nil
@@ -347,8 +361,20 @@ func (d *downloader) progressLoop(ctx context.Context, opt Options, done <-chan 
 			if opt.OnProgress != nil {
 				opt.OnProgress(d.downloaded.Load(), d.state.Size)
 			}
+			if opt.OnShards != nil {
+				opt.OnShards(d.snapshot())
+			}
 		}
 	}
+}
+
+// snapshot 返回分片的深拷贝（含实时传输状态）。
+func (d *downloader) snapshot() []Segment {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	out := make([]Segment, len(d.state.Segments))
+	copy(out, d.state.Segments)
+	return out
 }
 
 func (d *downloader) saveLoop(ctx context.Context, done <-chan struct{}, wg *sync.WaitGroup) {

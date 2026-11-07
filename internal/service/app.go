@@ -3,8 +3,10 @@ package service
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 
+	"github.com/besscroft/knot/internal/engine"
 	"github.com/besscroft/knot/internal/engine/hls"
 	"github.com/besscroft/knot/internal/engine/httpdl"
 	"github.com/egoist/mygo"
@@ -21,11 +23,11 @@ type Preview struct {
 	Size         int64  `json:"size"` // -1 表示未知
 	AcceptRanges bool   `json:"acceptRanges"`
 	ContentType  string `json:"contentType"`
-	Kind         string `json:"kind"` // http | hls
+	Kind         string `json:"kind"`      // http | hls
+	MediaType    string `json:"mediaType"` // video | audio | other
 }
 
 // ParseURL 探测链接，返回可确认的预览信息。
-// M1 只处理 HTTP 直链；M2-M4 将在此接入 HLS/网页抓取/站点解析。
 func (a *AppService) ParseURL(ctx context.Context, url string) (Preview, error) {
 	url = strings.TrimSpace(url)
 	if url == "" {
@@ -46,7 +48,19 @@ func (a *AppService) ParseURL(ctx context.Context, url string) (Preview, error) 
 		AcceptRanges: probe.AcceptRanges,
 		ContentType:  probe.ContentType,
 		Kind:         kind,
+		MediaType:    classifyMedia(probe.ContentType, probe.URL, kind),
 	}, nil
+}
+
+// DownloadFfmpeg 手动触发 FFmpeg 获取（查找本机 → 自动下载并校验）。
+// 阻塞直到完成；成功返回 ffmpeg 路径。
+func (a *AppService) DownloadFfmpeg(ctx context.Context) (string, error) {
+	return engine.EnsureFfmpeg(ctx, true)
+}
+
+// CheckFfmpeg 仅检测本机 FFmpeg（不触发下载），返回路径或空串。
+func (a *AppService) CheckFfmpeg(ctx context.Context) (string, error) {
+	return engine.FindFfmpeg(ctx), nil
 }
 
 // GetSettings 返回当前设置。
@@ -57,7 +71,7 @@ func (a *AppService) GetSettings() (Settings, error) {
 	return settings.Get(), nil
 }
 
-// SaveSettings 保存设置，并同步队列并发数与下载代理。
+// SaveSettings 保存设置，并同步队列并发数、下载代理与 FFmpeg 配置。
 func (a *AppService) SaveSettings(v Settings) error {
 	if settings == nil || mgr == nil {
 		return ErrNotReady
@@ -70,6 +84,9 @@ func (a *AppService) SaveSettings(v Settings) error {
 		return err
 	}
 	mgr.SetMaxRun(v.MaxConcurrent)
+	cacheDir, _ := mygo.App.Path(mygo.PathCache)
+	engine.SetFfmpegOptions(v.FfmpegPath, filepath.Join(cacheDir, "ffmpeg"))
+	UpdateSniffConfig() // 嗅探类型白名单即时推送给站点页面
 	return nil
 }
 

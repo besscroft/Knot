@@ -9,11 +9,17 @@ import (
 	"github.com/egoist/mygo"
 )
 
+// appName 是应用名：dev 与构建产物都用它（mygo dev 默认用 "<名> Dev"，
+// 会把任务/设置/浏览器 Cookie 分成两套数据目录，见 service/migrate.go）。
+const appName = "Knot"
+
 func main() {
 	// 第二个实例启动时直接退出，由已运行的实例接管。
 	if !mygo.App.RequestSingleInstanceLock() {
 		return
 	}
+	// 统一 dev 与构建产物的数据目录，须在 Run 与任何 Path 调用之前。
+	mygo.App.SetName(appName)
 
 	mygo.Bind(&service.Tasks{})
 	mygo.BindAs("App", &service.AppService{})

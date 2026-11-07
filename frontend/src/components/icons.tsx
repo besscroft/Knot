@@ -151,3 +151,42 @@ export function IconSearch({ className }: IconProps) {
     </svg>
   );
 }
+
+export function IconExternal({ className }: IconProps) {
+  return (
+    <svg {...base(className)}>
+      <path d="M15 3h6v6M10 14 21 3" />
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+    </svg>
+  );
+}
+
+export function IconGrid({ className }: IconProps) {
+  return (
+    <svg {...base(className)}>
+      <rect x="4" y="4" width="7" height="7" rx="1" />
+      <rect x="13" y="4" width="7" height="7" rx="1" />
+      <rect x="4" y="13" width="7" height="7" rx="1" />
+      <rect x="13" y="13" width="7" height="7" rx="1" />
+    </svg>
+  );
+}
+
+export function IconList({ className }: IconProps) {
+  return (
+    <svg {...base(className)}>
+      <path d="M8 6h12M8 12h12M8 18h12" />
+      <path d="M4 6h.01M4 12h.01M4 18h.01" />
+    </svg>
+  );
+}
+
+export function IconMusic({ className }: IconProps) {
+  return (
+    <svg {...base(className)}>
+      <path d="M9 18V5l11-2v13" />
+      <circle cx="6" cy="18" r="3" />
+      <circle cx="17" cy="16" r="3" />
+    </svg>
+  );
+}

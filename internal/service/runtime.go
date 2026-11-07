@@ -45,8 +45,10 @@ func Init() error {
 	if err := os.MkdirAll(userData, 0o755); err != nil {
 		return err
 	}
+	cacheDir, _ := mygo.App.Path(mygo.PathCache)
+	migrateLegacyData(userData, cacheDir) // 旧开发目录的数据一次性并入（不覆盖已有）
 
-	def := Settings{DownloadDir: defaultDownloadDir(), Threads: 8, MaxConcurrent: 3}
+	def := Settings{DownloadDir: defaultDownloadDir(), Threads: 8, MaxConcurrent: 3, SniffTypes: AllSniffTypes}
 	settings, err = loadSettings(filepath.Join(userData, "settings.json"), def)
 	if err != nil {
 		return err
@@ -61,6 +63,20 @@ func Init() error {
 	if err := httpdl.SetProxy(settings.Get().Proxy); err != nil {
 		log.Println("应用代理设置失败:", err)
 	}
+
+	// FFmpeg：设置指定路径 + 自动下载缓存目录。
+	engine.SetFfmpegOptions(settings.Get().FfmpegPath, filepath.Join(cacheDir, "ffmpeg"))
+
+	RegisterMediaProtocol() // media:// 文件与封面服务（须在窗口创建前注册）
+
+	// 旧版本完成的媒体任务没有时长：后台逐个回填。
+	go func() {
+		for _, t := range mgr.List() {
+			if t.Status == engine.StatusDone {
+				mgr.EnsureDuration(t.ID)
+			}
+		}
+	}()
 
 	go sniffLoop() // 浏览中周期性重扫页面资源
 	return nil

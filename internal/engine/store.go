@@ -29,6 +29,15 @@ func (s *Store) Load() ([]Task, error) {
 	return tasks, nil
 }
 
+// Backup 把任务文件改名保留（加载失败时调用：避免随后的空列表写入把
+// 可能可抢救的数据覆盖掉）。
+func (s *Store) Backup() error {
+	if _, err := os.Lstat(s.path); err != nil {
+		return err
+	}
+	return os.Rename(s.path, s.path+".corrupt")
+}
+
 // Save 原子地写入全部任务。
 func (s *Store) Save(tasks []Task) error {
 	data, err := json.MarshalIndent(tasks, "", "  ")

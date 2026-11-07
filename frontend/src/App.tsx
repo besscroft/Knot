@@ -1,15 +1,18 @@
 import { useEffect, useState } from "react";
 import { useTasks } from "./store/tasks";
-import { TaskList } from "./components/TaskItem";
+import { TaskList, TaskGrid } from "./components/TaskItem";
+import { MediaViewer } from "./components/MediaViewer";
+import { TaskDetail } from "./components/TaskDetail";
 import { NewTaskDialog } from "./components/NewTaskDialog";
 import { SettingsView } from "./views/Settings";
 import { BrowserView } from "./views/Browser";
-import { Button } from "./components/ui";
-import { IconCheck, IconDownload, IconGlobe, IconPlus, IconX } from "./components/icons";
+import { BrowserToolbar } from "./views/BrowserToolbar";
+import { Button, EmptyState, IconButton } from "./components/ui";
+import { IconCheck, IconDownload, IconGlobe, IconGrid, IconList, IconPlus, IconX } from "./components/icons";
 import { formatSpeed } from "./lib/format";
 import { cn } from "./lib/utils";
 import { Browser, events } from "./mygo";
-import type { Task } from "./mygo";
+import type { BrowserState, Task } from "./mygo";
 
 type View = "active" | "done" | "browser" | "settings";
 
@@ -26,6 +29,19 @@ export default function App() {
     return saved === "done" || saved === "browser" || saved === "settings" ? saved : "active";
   });
   const [newDialog, setNewDialog] = useState(false);
+  // 已完成页展示方式：卡片（默认，含封面/时长/播放）或列表。
+  const [doneView, setDoneView] = useState<"cards" | "list">(() =>
+    localStorage.getItem("knot.doneView") === "list" ? "list" : "cards",
+  );
+  // 正在应用内查看/播放的已完成任务。
+  const [playing, setPlaying] = useState<Task | null>(null);
+  // 任务详情弹窗：存任务 ID，渲染时从 store 取最新对象（广播自动跟随）。
+  const [detailId, setDetailId] = useState<string | null>(null);
+
+  function switchDoneView(v: "cards" | "list") {
+    setDoneView(v);
+    localStorage.setItem("knot.doneView", v);
+  }
   const init = useTasks((s) => s.init);
   const tasks = useTasks((s) => s.byId);
   const order = useTasks((s) => s.order);
@@ -45,20 +61,30 @@ export default function App() {
   }, [init]);
 
   const list: Task[] = order.map((id) => tasks[id]);
+  // 详情弹窗渲染的是 store 里的最新任务对象，广播更新自动跟随。
+  const detailTask = detailId ? (tasks[detailId] ?? null) : null;
   const active = list.filter((t) => t.status !== "done");
   const done = list.filter((t) => t.status === "done");
   const running = list.filter((t) => t.status === "running");
   const totalSpeed = running.reduce((sum, t) => sum + t.speed, 0);
 
-  // 浏览状态：浏览中在侧栏显示状态条，切换视图即退出浏览。
-  const [browsing, setBrowsing] = useState(false);
+  // 浏览状态：会话存活（mode≠app）在侧栏显示状态条；站点窗口可见
+  // （mode==browsing）时主区域显示工具栏。切去其他视图 = 暂停会话，
+  // 点回「浏览器」= 原样恢复；只有状态条 × 或工具栏「退出」才退出。
+  const [browsing, setBrowsing] = useState(false); // 浏览会话存活
+  const [browsingActive, setBrowsingActive] = useState(false); // 站点窗口可见
   useEffect(() => {
-    void Browser.state().then((s) => setBrowsing(s.mode === "browsing"));
-    return events.browserState.on((s) => setBrowsing(s.mode === "browsing"));
+    const apply = (s: BrowserState) => {
+      setBrowsing(s.mode !== "app");
+      setBrowsingActive(s.mode === "browsing");
+    };
+    void Browser.state().then(apply);
+    return events.browserState.on(apply);
   }, []);
 
   function switchView(v: View) {
-    if (browsing) void Browser.exit();
+    if (browsingActive && v !== "browser") void Browser.pause();
+    else if (browsing && !browsingActive && v === "browser") void Browser.resume();
     setView(v);
     localStorage.setItem("knot.view", v);
   }
@@ -97,18 +123,31 @@ export default function App() {
         })}
         <div className="flex-1" />
         {browsing && (
-          <button
-            type="button"
-            onClick={() => void Browser.exit()}
-            className="mx-0.5 mb-1 flex items-center justify-between rounded-md border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-xs text-accent transition-colors hover:bg-accent/15"
-            title="退出浏览，回到应用界面"
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              if (!browsingActive) void Browser.resume();
+            }}
+            className="mx-0.5 mb-1 flex cursor-pointer items-center justify-between rounded-md border border-accent/40 bg-accent-soft px-2.5 py-1.5 text-xs text-accent transition-colors hover:bg-accent/15"
+            title={browsingActive ? "正在浏览" : "点击继续浏览"}
           >
             <span className="flex items-center gap-1.5">
               <IconGlobe className="size-3.5" />
-              浏览中
+              {browsingActive ? "浏览中" : "浏览已暂停"}
             </span>
-            <IconX className="size-3.5" />
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void Browser.exit();
+              }}
+              className="-mr-1 rounded p-0.5 transition-colors hover:bg-accent/20"
+              title="退出浏览，回到应用界面"
+            >
+              <IconX className="size-3.5" />
+            </button>
+          </div>
         )}
         {running.length > 0 && (
           <div className="px-2.5 py-1.5 text-[11px] text-muted">
@@ -117,9 +156,12 @@ export default function App() {
         )}
       </nav>
 
-      {/* 主区域 */}
+      {/* 主区域：浏览会话存活且在"浏览器"视图时显示常驻工具栏
+          （乐观渲染，站点子窗口与暂停恢复都靠 browser-state 事件跟进） */}
       <main className="flex min-w-0 flex-1 flex-col">
-        {view === "settings" ? (
+        {view === "browser" && browsing ? (
+          <BrowserToolbar />
+        ) : view === "settings" ? (
           <SettingsView />
         ) : view === "browser" ? (
           <BrowserView />
@@ -129,10 +171,36 @@ export default function App() {
               <h1 className="text-sm font-medium">
                 {view === "active" ? "下载中" : "已完成"}
               </h1>
-              <Button onClick={() => setNewDialog(true)}>
-                <IconPlus className="size-4" />
-                新建下载
-              </Button>
+              <div className="flex items-center gap-2">
+                {view === "done" && (
+                  <div className="flex items-center rounded-md border border-border p-0.5">
+                    <IconButton
+                      title="卡片视图"
+                      onClick={() => switchDoneView("cards")}
+                      className={cn(
+                        "size-6",
+                        doneView === "cards" && "bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent",
+                      )}
+                    >
+                      <IconGrid className="size-4" />
+                    </IconButton>
+                    <IconButton
+                      title="列表视图"
+                      onClick={() => switchDoneView("list")}
+                      className={cn(
+                        "size-6",
+                        doneView === "list" && "bg-accent-soft text-accent hover:bg-accent-soft hover:text-accent",
+                      )}
+                    >
+                      <IconList className="size-4" />
+                    </IconButton>
+                  </div>
+                )}
+                <Button onClick={() => setNewDialog(true)}>
+                  <IconPlus className="size-4" />
+                  新建下载
+                </Button>
+              </div>
             </header>
             <div className="min-h-0 flex-1 overflow-y-auto p-4">
               {loaded &&
@@ -142,12 +210,23 @@ export default function App() {
                     emptyText="暂无进行中的任务"
                     emptyHint="点击右上角「新建下载」开始"
                     emptyIcon={<IconDownload className="size-10 opacity-40" />}
+                    onDetail={(t) => setDetailId(t.id)}
                   />
+                ) : doneView === "cards" ? (
+                  done.length === 0 ? (
+                    <EmptyState
+                      text="还没有完成的下载"
+                      icon={<IconCheck className="size-10 opacity-40" />}
+                    />
+                  ) : (
+                    <TaskGrid tasks={done} onPlay={setPlaying} />
+                  )
                 ) : (
                   <TaskList
                     tasks={done}
                     emptyText="还没有完成的下载"
                     emptyIcon={<IconCheck className="size-10 opacity-40" />}
+                    onDetail={(t) => setDetailId(t.id)}
                   />
                 ))}
             </div>
@@ -156,6 +235,10 @@ export default function App() {
       </main>
 
       <NewTaskDialog open={newDialog} onClose={() => setNewDialog(false)} />
+      {playing && <MediaViewer task={playing} onClose={() => setPlaying(null)} />}
+      {detailTask && (
+        <TaskDetail key={detailTask.id} task={detailTask} onClose={() => setDetailId(null)} />
+      )}
     </div>
   );
 }

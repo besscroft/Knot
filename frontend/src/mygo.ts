@@ -4,15 +4,43 @@ import { call, event } from "mygo-runtime";
 
 // ---- Types ----
 
+/** BiliQuality 是一个可选画质；大小按码率×时长估算。 */
+export interface BiliQuality {
+  /** playinfo 画质号；durl 模式为 0 */
+  id: number;
+  /** 如 "高清 1080P60" */
+  desc: string;
+  codecs?: string;
+  /** 估算字节数，0 = 未知 */
+  size: number;
+}
+
+/** BilibiliInfo 是 B 站视频页的解析结果（Browser.BilibiliInfo 返回值）。 */
+export interface BilibiliInfo {
+  title: string;
+  /** 当前分 P（1 起） */
+  page: number;
+  /** 总 P 数 */
+  pages: number;
+  /** true = DASH 分轨；false = 旧版 durl 单文件 */
+  dash: boolean;
+  qualities: BiliQuality[];
+  /** 将采用的音轨描述（DASH 模式） */
+  audio: string;
+}
+
 /** BrowserState 是浏览状态（browser-state 事件载荷）。 */
 export interface BrowserState {
-  /** app | browsing */
+  /** app | browsing | paused */
   mode: string;
   /** 站点当前地址 */
   url: string;
   title: string;
   canBack: boolean;
   canForward: boolean;
+  loading: boolean;
+  /** 嗅探浮窗是否可见 */
+  panelVisible: boolean;
 }
 
 /** CreateOptions 是新建任务的参数，均可省略。 */
@@ -23,10 +51,25 @@ export interface CreateOptions {
   name?: string;
   /** 分片数，0 = 用设置 */
   threads?: number;
+  /** 目标格式，空 = 用设置默认/原样 */
+  format?: string;
   /** 浏览上下文：应用内浏览器创建任务时携带，规避防盗链。 */
   referer?: string;
   cookie?: string;
   userAgent?: string;
+}
+
+/**
+ * DownloadRequest 是网页触发下载时发给前端的确认请求
+ * （download-request 事件载荷）：前端弹出文件名确认框，用户确认后才
+ * 调 Browser.Download 入队，取消则什么都不做。
+ */
+export interface DownloadRequest {
+  url: string;
+  /** 网页/服务器建议的文件名，可为空 */
+  name: string;
+  /** 拦截时所在页面（确认时页面可能已切走） */
+  referer: string;
 }
 
 /** Preview 是 ParseURL 的结果：新建任务前的探测预览。 */
@@ -39,6 +82,8 @@ export interface Preview {
   contentType: string;
   /** http | hls */
   kind: string;
+  /** video | audio | other */
+  mediaType: string;
 }
 
 /** Settings 是应用设置，持久化在 userData/settings.json。 */
@@ -50,6 +95,30 @@ export interface Settings {
   maxConcurrent: number;
   /** 下载代理，空 = 跟随系统/环境 */
   proxy: string;
+  /** 视频默认格式：mp4/mkv/mov/webm，空 = mp4 */
+  videoFormat: string;
+  /** 音频默认格式：m4a/mp3/opus/flac/wav，空 = m4a */
+  audioFormat: string;
+  /** 手动指定 FFmpeg 路径，空 = 自动查找/下载 */
+  ffmpegPath: string;
+  /** 浏览嗅探允许的资源类型，全量见 AllSniffTypes */
+  sniffTypes: string[];
+}
+
+/**
+ * ShardDetail 是一个下载分片的实时快照（http 多线程任务专用；
+ * 其 JSON 形态即前端详情框看到的数据）。
+ */
+export interface ShardDetail {
+  index: number;
+  start: number;
+  /** 闭区间；-1 = 未定长单流 */
+  end: number;
+  written: number;
+  /** 正在有连接传输 */
+  active: boolean;
+  /** 重试轮次，0 = 首次尝试 */
+  retrying: number;
 }
 
 /** Sniffed 是嗅探到的资源条目。 */
@@ -88,11 +157,22 @@ export interface Task {
   error?: string;
   /** 分片/并发数，0 表示用默认 */
   threads?: number;
+  /** 目标格式（mp4/mkv/mov/webm/m4a/mp3/opus/flac/wav），空 = 原样 */
+  format?: string;
   /** 浏览上下文：从应用内浏览器创建的任务携带，规避站点防盗链。 */
   referer?: string;
   /** 不在 UI 展示 */
   cookie?: string;
   userAgent?: string;
+  /** 媒体时长（秒），完成后由 ffprobe 探测，0 = 未知 */
+  duration?: number;
+  /**
+   * DASH 分轨任务（kind=dash）：AudioURL 为第二路流直链（纯音频任务为空），
+   * StreamSize/AudioSize 是两路流各自的字节数，用于进度加权与总大小展示。
+   */
+  audioUrl?: string;
+  streamSize?: number;
+  audioSize?: number;
   createdAt: string;
   completedAt?: string;
 }
@@ -129,6 +209,13 @@ export const Tasks = {
   reveal(id: string): Promise<void> {
     return call("Tasks.Reveal", id);
   },
+  /**
+   * Shards 返回任务最近的分片快照（任务详情框每秒轮询）。
+   * 仅 http 多线程任务有数据；HLS 返回空（用任务上的分片聚合计数）。
+   */
+  shards(id: string): Promise<ShardDetail[]> {
+    return call("Tasks.Shards", id);
+  },
 } as const;
 
 /**
@@ -136,14 +223,22 @@ export const Tasks = {
  * 前端通过 App.* 调用，避免与框架的 mygo.App 混淆。
  */
 export const App = {
+  /** CheckFfmpeg 仅检测本机 FFmpeg（不触发下载），返回路径或空串。 */
+  checkFfmpeg(): Promise<string> {
+    return call("App.CheckFfmpeg");
+  },
+  /**
+   * DownloadFfmpeg 手动触发 FFmpeg 获取（查找本机 → 自动下载并校验）。
+   * 阻塞直到完成；成功返回 ffmpeg 路径。
+   */
+  downloadFfmpeg(): Promise<string> {
+    return call("App.DownloadFfmpeg");
+  },
   /** GetSettings 返回当前设置。 */
   getSettings(): Promise<Settings> {
     return call("App.GetSettings");
   },
-  /**
-   * ParseURL 探测链接，返回可确认的预览信息。
-   * M1 只处理 HTTP 直链；M2-M4 将在此接入 HLS/网页抓取/站点解析。
-   */
+  /** ParseURL 探测链接，返回可确认的预览信息。 */
   parseURL(url: string): Promise<Preview> {
     return call("App.ParseURL", url);
   },
@@ -151,7 +246,7 @@ export const App = {
   pickFolder(): Promise<string> {
     return call("App.PickFolder");
   },
-  /** SaveSettings 保存设置，并同步队列并发数与下载代理。 */
+  /** SaveSettings 保存设置，并同步队列并发数、下载代理与 FFmpeg 配置。 */
   saveSettings(v: Settings): Promise<void> {
     return call("App.SaveSettings", v);
   },
@@ -162,6 +257,19 @@ export const Browser = {
   /** Back 后退。 */
   back(): Promise<void> {
     return call("Browser.Back");
+  },
+  /**
+   * BilibiliDownload 把当前 B 站视频页的指定画质加入下载队列：
+   * DASH 分轨 → dash 双流任务（合流）；旧版 durl → 普通单文件任务。
+   * name 为空时按标题/分 P 生成；format 语义与 Tasks.Create 一致（音频
+   * 格式 = 只提取音轨）。
+   */
+  bilibiliDownload(qualityID: number, name: string, format: string): Promise<void> {
+    return call("Browser.BilibiliDownload", qualityID, name, format);
+  },
+  /** BilibiliInfo 返回当前 B 站视频页可下载的画质信息（嗅探卡片弹窗用）。 */
+  bilibiliInfo(): Promise<BilibiliInfo> {
+    return call("Browser.BilibiliInfo");
   },
   /**
    * Download 把嗅探到的资源加入下载队列；referer 为捕获时所在页面，
@@ -186,17 +294,39 @@ export const Browser = {
   navigate(url: string): Promise<void> {
     return call("Browser.Navigate", url);
   },
-  /** Open 进入浏览模式：站点子窗口覆盖内容区加载 url，嗅探浮窗浮出右上角。 */
+  /** Open 进入浏览模式：站点子窗口对齐内容区工具栏下方加载 url，嗅探浮窗浮出右上角。 */
   open(url: string): Promise<void> {
     return call("Browser.Open", url);
+  },
+  /** OpenExternal 用系统默认浏览器打开 url（应对验证码、支付等场景）。 */
+  openExternal(url: string): Promise<void> {
+    return call("Browser.OpenExternal", url);
+  },
+  /**
+   * Pause 暂停浏览：隐藏站点窗口与浮窗但会话保留（页面、历史不变），
+   * 切去其他侧栏视图时调用。Browser.Resume 原样恢复。
+   */
+  pause(): Promise<void> {
+    return call("Browser.Pause");
   },
   /** Reload 重新加载当前页。 */
   reload(): Promise<void> {
     return call("Browser.Reload");
   },
+  /** Resume 恢复暂停的浏览：站点窗口（与暂停前可见的嗅探浮窗）原样显示。 */
+  resume(): Promise<void> {
+    return call("Browser.Resume");
+  },
   /** Scan 立即嗅探当前页面资源并广播结果。 */
   scan(): Promise<void> {
     return call("Browser.Scan");
+  },
+  /**
+   * ShowPanel 重新浮出嗅探浮窗：已存在则显示，被销毁则重建，
+   * 并立即补嗅一次当前页面（面板隐藏期间页面 hook 仍在收集）。
+   */
+  showPanel(): Promise<void> {
+    return call("Browser.ShowPanel");
   },
   /** State 返回当前浏览状态。 */
   state(): Promise<BrowserState> {
@@ -216,6 +346,8 @@ export const events = {
   browserState: event<BrowserState>("browser-state"),
   /** SniffedEvt 广播嗅探结果（页面加载后自动扫描与手动重新嗅探共用）。 */
   browserSniffed: event<Sniffed[]>("browser-sniffed"),
+  /** DownloadRequestEvt 广播下载确认请求。 */
+  downloadRequest: event<DownloadRequest>("download-request"),
   /**
    * TaskUpdated 把单个任务的最新快照广播给所有窗口。
    * 包级声明以便 `mygo generate` 收录进 TypeScript 客户端（events.taskUpdated）。

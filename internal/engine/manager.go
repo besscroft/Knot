@@ -31,6 +31,8 @@ type Manager struct {
 	tasks  map[string]*entry
 	order  []string // 创建顺序，遍历与持久化都用它
 
+	probing map[string]bool // 正在探测时长的任务 ID（去重）
+
 	runWG sync.WaitGroup // 进行中的 runTask goroutine
 }
 
@@ -40,8 +42,9 @@ type entry struct {
 	done     chan struct{} // 关闭表示 runTask 已退出
 	pausing  bool
 	removing bool
-	last     int64   // 上次采样的 Downloaded
-	speedEMA float64 // 平滑后的速度
+	last     int64         // 上次采样的 Downloaded
+	speedEMA float64       // 平滑后的速度
+	shards   []ShardDetail // 最近一次分片快照（http 多线程任务；暂停后保留供展示）
 }
 
 // NewManager 创建队列管理器；maxRun 为同时进行的任务数上限。
@@ -50,9 +53,10 @@ func NewManager(store *Store, maxRun int) *Manager {
 		maxRun = 1
 	}
 	return &Manager{
-		store:  store,
-		maxRun: maxRun,
-		tasks:  make(map[string]*entry),
+		store:   store,
+		maxRun:  maxRun,
+		tasks:   make(map[string]*entry),
+		probing: make(map[string]bool),
 	}
 }
 
@@ -63,6 +67,9 @@ func (m *Manager) SetNotifier(n Notifier) { m.notify = n }
 func (m *Manager) Start() {
 	tasks, err := m.store.Load()
 	if err != nil {
+		// 任务文件损坏：改名保留原件再从空列表开始，避免空列表覆盖掉
+		// 可能可抢救的数据；改名失败（如被占用）也只能照常继续。
+		_ = m.store.Backup()
 		tasks = nil
 	}
 	m.mu.Lock()
@@ -183,6 +190,9 @@ func (m *Manager) Remove(id string) error {
 	if e.task.Kind == "hls" {
 		_ = os.RemoveAll(taskWorkDir(e.task))
 	}
+	if e.task.Kind == "dash" {
+		_ = os.RemoveAll(dashWorkDir(e.task))
+	}
 	m.persist()
 	return nil
 }
@@ -207,6 +217,20 @@ func (m *Manager) Get(id string) (Task, bool) {
 		return Task{}, false
 	}
 	return e.task, true
+}
+
+// Shards 返回任务最近的分片快照（副本）。仅 http 多线程任务有数据；
+// 暂停/出错后保留最后一次快照供详情展示。任务不存在返回 nil。
+func (m *Manager) Shards(id string) []ShardDetail {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	e, ok := m.tasks[id]
+	if !ok || len(e.shards) == 0 {
+		return nil
+	}
+	out := make([]ShardDetail, len(e.shards))
+	copy(out, e.shards)
+	return out
 }
 
 // SetMaxRun 更新同时进行的任务数上限，并按需补启动。
@@ -296,6 +320,8 @@ func (m *Manager) runTask(ctx context.Context, e *entry) {
 				m.mu.Unlock()
 			},
 		})
+	case "dash":
+		err = m.runDash(ctx, e, t)
 	default:
 		err = httpdl.Download(ctx, t.URL, t.Path(), httpdl.Options{
 			Threads: t.Threads,
@@ -303,6 +329,18 @@ func (m *Manager) runTask(ctx context.Context, e *entry) {
 			OnProgress: func(downloaded, _ int64) {
 				m.mu.Lock()
 				e.task.Downloaded = downloaded
+				m.mu.Unlock()
+			},
+			OnShards: func(segs []httpdl.Segment) {
+				shards := make([]ShardDetail, len(segs))
+				for i, s := range segs {
+					shards[i] = ShardDetail{
+						Index: i, Start: s.Start, End: s.End, Written: s.Written,
+						Active: s.Active, Retrying: s.Retrying,
+					}
+				}
+				m.mu.Lock()
+				e.shards = shards
 				m.mu.Unlock()
 			},
 		})
@@ -320,6 +358,23 @@ func (m *Manager) runTask(ctx context.Context, e *entry) {
 		e.task.Error = err.Error()
 		e.task.Speed = 0
 	default:
+		// 目标格式转换（如 mkv/mp3）：失败则任务置错并保留原文件。
+		if _, cerr := Finalize(ctx, t.Path(), t.Format); cerr != nil {
+			if ctx.Err() != nil {
+				e.task.Status = StatusPaused
+				e.task.Speed = 0
+			} else {
+				e.task.Status = StatusError
+				e.task.Error = cerr.Error()
+				e.task.Speed = 0
+			}
+			snapshot := e.task
+			m.mu.Unlock()
+			m.persist()
+			m.fire(snapshot)
+			m.pump()
+			return
+		}
 		now := time.Now()
 		e.task.Status = StatusDone
 		e.task.CompletedAt = &now
@@ -338,6 +393,48 @@ func (m *Manager) runTask(ctx context.Context, e *entry) {
 	m.persist()
 	m.fire(snapshot)
 	m.pump()
+	if snapshot.Status == StatusDone {
+		go m.EnsureDuration(snapshot.ID) // 后台探测媒体时长，不阻塞队列
+	}
+}
+
+// EnsureDuration 确保 done 媒体任务的时长已探测并写回（任务完成与启动
+// 回填共用）。探测在锁外进行，probing 集合防止并发重复探测。
+func (m *Manager) EnsureDuration(id string) {
+	m.mu.Lock()
+	e, ok := m.tasks[id]
+	if !ok || e.task.Status != StatusDone || e.task.Duration > 0 {
+		m.mu.Unlock()
+		return
+	}
+	kind := MediaKind(e.task.Name)
+	if kind != "video" && kind != "audio" {
+		m.mu.Unlock()
+		return
+	}
+	if m.probing[id] {
+		m.mu.Unlock()
+		return
+	}
+	m.probing[id] = true
+	path := e.task.Path()
+	m.mu.Unlock()
+
+	d := ProbeDuration(context.Background(), path)
+
+	m.mu.Lock()
+	delete(m.probing, id)
+	e, ok = m.tasks[id]
+	if !ok || d <= 0 || e.task.Duration > 0 {
+		m.mu.Unlock()
+		return
+	}
+	e.task.Duration = d
+	snapshot := e.task
+	m.mu.Unlock()
+
+	m.persist()
+	m.fire(snapshot)
 }
 
 // taskWorkDir 返回任务的工作目录（HLS 分片缓存）。

@@ -21,9 +21,11 @@ export function NewTaskDialog({ open, onClose }: { open: boolean; onClose: () =>
 function NewTaskForm({ onClose }: { onClose: () => void }) {
   const [url, setUrl] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [format, setFormat] = useState("");
 
   async function parse() {
     const trimmed = url.trim();
@@ -34,6 +36,7 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
     try {
       const p = await App.parseURL(trimmed);
       setPreview(p);
+      setName(p.name); // 预填建议文件名，可改
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -44,7 +47,7 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
   async function create() {
     setCreating(true);
     try {
-      await Tasks.create(url.trim(), {});
+      await Tasks.create(url.trim(), { format, name: name.trim() });
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -79,14 +82,24 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
 
         {preview && (
           <div className="rounded-lg border border-border bg-panel-2 p-3 text-sm">
-            <div className="truncate font-medium" title={preview.name}>
-              {preview.name}
+            <div>
+              <label className="mb-1 block text-xs text-muted" htmlFor="new-task-name">
+                文件名
+              </label>
+              <Input
+                id="new-task-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onFocus={(e) => e.target.select()}
+                placeholder="留空则从链接自动推断"
+                className="h-8"
+              />
             </div>
-            <div className="mt-1 text-xs text-muted">
+            <div className="mt-2 text-xs text-muted">
               {preview.kind === "hls" ? (
                 <>
                   <span className="font-medium text-violet-500">HLS 视频流</span>
-                  {" · 下载完成后自动合并为 MP4"}
+                  {format ? ` · 合并为 ${format.toUpperCase()}` : " · 自动合并"}
                 </>
               ) : (
                 <>
@@ -100,6 +113,40 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         )}
+
+      {preview && preview.mediaType !== "other" && (
+        <div className="flex flex-col gap-2">
+          <label className="text-xs text-muted" htmlFor="new-task-format">
+            保存为
+          </label>
+          <select
+            id="new-task-format"
+            value={format}
+            onChange={(e) => setFormat(e.target.value)}
+            className="h-8 rounded-md border border-border bg-panel px-2 text-sm text-text focus:border-accent focus:outline-none"
+          >
+            <option value="">默认（跟随设置）</option>
+            <optgroup label="视频">
+              <option value="mp4">MP4（无需其他工具即可播放）</option>
+              <option value="mkv">MKV</option>
+              <option value="mov">MOV</option>
+              <option value="webm">WebM（需源编码兼容）</option>
+            </optgroup>
+            <optgroup label="音频">
+              <option value="m4a">M4A</option>
+              <option value="mp3">MP3</option>
+              <option value="opus">Opus</option>
+              <option value="flac">FLAC</option>
+              <option value="wav">WAV</option>
+            </optgroup>
+          </select>
+          <p className="text-[11px] text-muted/70">
+            {format && format !== "mp4" && format !== "m4a"
+              ? "转换由 FFmpeg 完成：缺失时会自动下载（约 80 MB，仅首次）"
+              : "容器转换/音频提取均为流拷贝，速度很快"}
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-danger/30 bg-danger/10 p-3 text-xs text-danger">
