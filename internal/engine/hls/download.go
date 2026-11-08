@@ -72,13 +72,21 @@ func downloadSegments(ctx context.Context, mediaURL, workDir string, opt Options
 	}
 
 	// 分片文件路径与初始进度（已存在的分片视为完成，计入字节）。
+	// 缓存首字节不是 TS 同步字说明内容损坏（如旧版本曾把未解密分片落盘），
+	// 删除以便重新下载。
 	paths := make([]string, len(media.Segments))
 	var doneBytes int64
 	for i, seg := range media.Segments {
 		p := filepath.Join(workDir, fmt.Sprintf("seg_%06d.ts", seg.Index))
 		paths[i] = p
-		if info, err := os.Stat(p); err == nil && info.Size() > 0 {
+		info, err := os.Stat(p)
+		switch {
+		case err != nil || info.Size() == 0:
+			// 不存在或空文件：待下载
+		case cachedSegmentValid(p):
 			doneBytes += info.Size()
+		default:
+			_ = os.Remove(p)
 		}
 	}
 
@@ -237,6 +245,21 @@ func countDoneSegments(paths []string) int64 {
 		}
 	}
 	return n
+}
+
+// cachedSegmentValid 检查缓存分片是否像有效 TS（首字节为同步字）。
+// 仅作粗检：伪同步字等畸形内容由转封装阶段容错处理。
+func cachedSegmentValid(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	var head [1]byte
+	if _, err := io.ReadFull(f, head[:]); err != nil {
+		return false
+	}
+	return head[0] == tsSyncByte
 }
 
 // keyStore 缓存已取回的密钥。

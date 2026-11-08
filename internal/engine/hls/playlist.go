@@ -133,6 +133,11 @@ func Parse(ctx context.Context, client *http.Client, mediaURL string, headers *h
 	}
 
 	m := &Media{URL: final, Segments: make([]Segment, 0, len(pl.Segments))}
+	// EXT-X-KEY 按规范作用于其后所有分片（直至下一个 KEY 标签）。
+	// Eyevinn 解析器只把 KEY 挂到紧随其后的单个分片上，这里自行维护
+	// “当前密钥”逐分片继承，否则首片之后的分片会被当成未加密落盘密文。
+	var curURI, curIV string
+	haveKey := false
 	for i, seg := range pl.Segments {
 		if seg == nil {
 			continue // 解析器按容量预分配，尾部可能是 nil 占位
@@ -151,23 +156,28 @@ func Parse(ctx context.Context, client *http.Client, mediaURL string, headers *h
 		if s.URL, err = resolveRef(final, seg.URI); err != nil {
 			return nil, err
 		}
-		for _, k := range seg.Keys {
-			switch strings.ToLower(k.Method) {
-			case "", "none":
-				// 未加密，取第一个 NONE 即可
-			case "aes-128":
-				if k.URI == "" {
-					return nil, fmt.Errorf("AES-128 密钥缺少 URI")
+		if len(seg.Keys) > 0 {
+			for _, k := range seg.Keys {
+				switch strings.ToLower(k.Method) {
+				case "", "none":
+					curURI, curIV, haveKey = "", "", false
+				case "aes-128":
+					if k.URI == "" {
+						return nil, fmt.Errorf("AES-128 密钥缺少 URI")
+					}
+					if curURI, err = resolveRef(final, k.URI); err != nil {
+						return nil, err
+					}
+					curIV, haveKey = k.IV, true
+				case "sample-aes":
+					return nil, fmt.Errorf("暂不支持 SAMPLE-AES 加密")
+				default:
+					return nil, fmt.Errorf("不支持的加密方式 %q", k.Method)
 				}
-				if s.KeyURI, err = resolveRef(final, k.URI); err != nil {
-					return nil, err
-				}
-				s.KeyIV = k.IV
-			case "sample-aes":
-				return nil, fmt.Errorf("暂不支持 SAMPLE-AES 加密")
-			default:
-				return nil, fmt.Errorf("不支持的加密方式 %q", k.Method)
 			}
+		}
+		if haveKey {
+			s.KeyURI, s.KeyIV = curURI, curIV
 		}
 		m.Segments = append(m.Segments, s)
 	}
@@ -243,6 +253,8 @@ func fetchKey(ctx context.Context, client *http.Client, keyURI string, headers *
 }
 
 // decryptAES128 用 AES-128-CBC 解密分片并按 PKCS7 去填充。
+// 填充无效且结果不像 TS（不以同步字开头）时判定为密钥/IV 不匹配，
+// 直接报错而不是把乱码当明文落盘（那样会拖到转封装阶段才暴露）。
 func decryptAES128(data, key []byte, iv [16]byte) ([]byte, error) {
 	if len(data) == 0 || len(data)%16 != 0 {
 		return nil, fmt.Errorf("分片长度 %d 不是 16 的倍数，无法解密", len(data))
@@ -256,17 +268,19 @@ func decryptAES128(data, key []byte, iv [16]byte) ([]byte, error) {
 	// PKCS7：末尾 pad 字节都等于 pad 长度才认为是有效填充。
 	if n := len(out); n > 0 {
 		pad := int(out[n-1])
-		if pad >= 1 && pad <= 16 && pad <= n {
-			valid := true
-			for _, b := range out[n-pad:] {
-				if int(b) != pad {
-					valid = false
-					break
-				}
+		valid := pad >= 1 && pad <= 16 && pad <= n
+		for i := n - pad; valid && i < n; i++ {
+			if int(out[i]) != pad {
+				valid = false
 			}
-			if valid {
-				out = out[:n-pad]
-			}
+		}
+		if valid {
+			return out[:n-pad], nil
+		}
+		// 少数源不按 PKCS7 填充：解密结果以 TS 同步字开头则保留；
+		// 否则几乎必然是密钥或 IV 不匹配。
+		if out[0] != tsSyncByte {
+			return nil, fmt.Errorf("分片解密失败（密钥或 IV 不匹配，可能已失效）")
 		}
 	}
 	return out, nil

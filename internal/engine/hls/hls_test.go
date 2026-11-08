@@ -3,10 +3,12 @@ package hls
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 )
@@ -157,5 +159,125 @@ func TestParseRejectsLivePlaylist(t *testing.T) {
 	_, err := Parse(context.Background(), live.Client(), live.URL+"/live.m3u8", nil)
 	if err == nil {
 		t.Fatal("直播流应被拒绝")
+	}
+}
+
+// TestParseKeyAppliesToAllFollowingSegments 验证 EXT-X-KEY 按规范作用于其后
+// 所有分片（Eyevinn 解析器只挂到紧随其后的单个分片，需自行继承）。
+// 真实场景（KEY 声明在播放列表头部、之后不再重复）此前会导致首片之后的
+// 分片被当作未加密保存密文。
+func TestParseKeyAppliesToAllFollowingSegments(t *testing.T) {
+	key := make([]byte, 16)
+	if _, err := rand.Read(key); err != nil {
+		t.Fatal(err)
+	}
+	plain := []byte("ENCRYPTED-SEGMENT-CONTENT____________")
+	enc := encryptAES128(plain, key, make([]byte, 16))
+
+	list := "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n" +
+		"#EXT-X-PLAYLIST-TYPE:VOD\n" +
+		"#EXT-X-KEY:METHOD=AES-128,URI=\"key\",IV=0x" + hexEnc(make([]byte, 16)) + "\n" +
+		"#EXTINF:4.0,\nseg0.ts\n#EXTINF:4.0,\nseg1.ts\n#EXT-X-ENDLIST\n"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/list.m3u8", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(list)) })
+	mux.HandleFunc("/key", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(key) })
+	mux.HandleFunc("/seg0.ts", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(enc) })
+	mux.HandleFunc("/seg1.ts", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write(enc) })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	// Parse：两个分片都应带上密钥。
+	media, err := Parse(context.Background(), srv.Client(), srv.URL+"/list.m3u8", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i, seg := range media.Segments {
+		if seg.KeyURI != srv.URL+"/key" {
+			t.Fatalf("seg%d 未继承密钥: KeyURI=%q", i, seg.KeyURI)
+		}
+	}
+
+	// 下载：解密应作用于每个分片，拼接结果为明文。
+	allTS, err := downloadSegments(context.Background(), srv.URL+"/list.m3u8", t.TempDir(), Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(allTS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := bytes.Repeat(plain, 2); !bytes.Equal(got, want) {
+		t.Fatalf("解密后拼接内容不一致: got %q", got)
+	}
+}
+
+// TestParseKeyNoneStopsInheritance 验证 METHOD=NONE 之后不再继承密钥。
+func TestParseKeyNoneStopsInheritance(t *testing.T) {
+	list := "#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXT-X-MEDIA-SEQUENCE:0\n" +
+		"#EXT-X-PLAYLIST-TYPE:VOD\n#EXT-X-ENDLIST\n" +
+		"#EXT-X-KEY:METHOD=AES-128,URI=\"key\",IV=0x" + hexEnc(make([]byte, 16)) + "\n" +
+		"#EXTINF:4.0,\nseg0.ts\n" +
+		"#EXT-X-KEY:METHOD=NONE\n" +
+		"#EXTINF:4.0,\nseg1.ts\n"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(list))
+	}))
+	defer srv.Close()
+
+	media, err := Parse(context.Background(), srv.Client(), srv.URL+"/list.m3u8", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if media.Segments[0].KeyURI == "" {
+		t.Fatal("seg0 应加密")
+	}
+	if media.Segments[1].KeyURI != "" {
+		t.Fatal("NONE 之后 seg1 不应继承密钥")
+	}
+}
+
+// TestDecryptRejectsWrongKey 验证密钥不匹配时明确报错而非静默产出乱码。
+func TestDecryptRejectsWrongKey(t *testing.T) {
+	realKey := []byte("0123456789abcdef")
+	iv := [16]byte{}
+	cipherText := encryptAES128([]byte("SOME-TS-PAYLOAD-NOT-ALIGN________"), realKey, iv[:])
+
+	wrongKey := []byte("fedcba9876543210")
+	if _, err := decryptAES128(cipherText, wrongKey, iv); err == nil {
+		t.Fatal("错误密钥应报错")
+	}
+	got, err := decryptAES128(cipherText, realKey, iv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.HasPrefix(got, []byte("SOME-TS-PAYLOAD")) {
+		t.Fatalf("正确密钥解密结果不符: %q", got)
+	}
+}
+
+// TestRemuxRejectsGarbageTS 验证整体损坏的 TS 走“数据损坏”报错而非 panic。
+func TestRemuxRejectsGarbageTS(t *testing.T) {
+	dir := t.TempDir()
+	tsPath := filepath.Join(dir, "bad.ts")
+	// 伪同步字开头的垃圾包 + 无同步字垃圾，足以让解析器大面积失败。
+	buf := make([]byte, 512*tsPacketSize)
+	for i := range buf {
+		buf[i] = byte(i * 7)
+	}
+	for i := 0; i < len(buf); i += tsPacketSize {
+		buf[i] = tsSyncByte // 同步字对但内容全是垃圾
+	}
+	if err := os.WriteFile(tsPath, buf, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := Remux(tsPath, filepath.Join(dir, "bad.mp4"))
+	if err == nil {
+		t.Fatal("垃圾 TS 应报错")
+	}
+	if strings.Contains(err.Error(), "转封装异常") {
+		t.Fatalf("不应以 panic 兜底: %v", err)
+	}
+	if !strings.Contains(err.Error(), "损坏") && !strings.Contains(err.Error(), "没有可识别") {
+		t.Fatalf("应给出明确损坏提示: %v", err)
 	}
 }
