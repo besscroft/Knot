@@ -218,9 +218,10 @@ func mediaHandler(w http.ResponseWriter, r *http.Request) {
 func serveWebIndex(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	// 页面脚本样式内联；资源全部同源，只放行自身。
+	// 页面脚本样式内联；数据请求与资源只放行同源（connect-src 管列表 fetch，
+	// 缺了它 default-src 'none' 会把同源 fetch 一并拦掉）。
 	w.Header().Set("Content-Security-Policy",
-		"default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'")
+		"default-src 'none'; connect-src 'self'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write(webIndex)
 }
