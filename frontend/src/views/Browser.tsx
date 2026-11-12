@@ -20,11 +20,17 @@ export function BrowserView() {
   }
 
   return (
-    <div className="flex h-full items-center justify-center p-6">
+    <div className="flex h-full flex-col items-center justify-center p-6">
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center gap-2.5">
-          <Globe className="size-5 text-accent" />
+        {/* 聚焦头部：图标容器与 EmptyState 同语言，标题与主描述居中 */}
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <div className="flex size-14 items-center justify-center rounded-[var(--radius-panel)] border border-border bg-surface-muted text-accent">
+            <Globe className="size-7" />
+          </div>
           <h1 className="text-lg font-semibold">打开网站</h1>
+          <p className="text-xs leading-5 text-muted">
+            进入网站后，页面里的图片、音视频、压缩包等资源会被自动收集，勾选即可下载
+          </p>
         </div>
         <div className="flex items-end gap-2">
           <Input
@@ -38,9 +44,8 @@ export function BrowserView() {
           />
           <Button onClick={start}>开始浏览</Button>
         </div>
-        <p className="mt-4 text-xs leading-5 text-muted">
-          主窗口将直接进入网站，右上角浮出「资源嗅探」面板：页面里的图片、音视频、压缩包等资源会被自动收集，勾选即可下载；
-          网页触发的下载也会自动转入下载队列。退出浏览随时回到应用界面。
+        <p className="mt-4 text-center text-[11px] leading-5 text-muted/70">
+          网页触发的下载会自动转入下载队列；退出浏览随时回到应用界面
         </p>
       </div>
     </div>
