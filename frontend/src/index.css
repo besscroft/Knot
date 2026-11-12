@@ -95,6 +95,14 @@ textarea {
   white-space: nowrap;
 }
 
+/* Tooltip 紧凑化：Arc 默认 12/16px 内边距 + 14px 字号偏大；Radix 气泡渲染在
+   Portal 里，用双属性选择器抬高优先级压过 tooltip.module.css。 */
+[role="tooltip"][data-side] {
+  padding: 4px 9px;
+  border-radius: 8px;
+  font-size: var(--text-xs);
+}
+
 @keyframes progress-slide {
   0% {
     transform: translateX(-120%);
