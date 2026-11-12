@@ -34,7 +34,7 @@ export function NewTaskDialog({ open, onClose }: { open: boolean; onClose: () =>
         if (!next) onClose();
       }}
     >
-      <DialogContent title="新建下载" description="粘贴链接，解析后选择保存格式">
+      <DialogContent title="新建下载">
         {/* 仅在打开时挂载表单，关闭即销毁，state 每次都是全新的 */}
         {open ? <NewTaskForm onClose={onClose} /> : null}
       </DialogContent>
@@ -88,7 +88,7 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
           label="下载链接（http/https 直链）"
           className="min-w-0 flex-1"
           autoFocus
-          placeholder="https://example.com/file.zip"
+          placeholder="粘贴链接，回车解析（http/https 直链）"
           value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => {
@@ -152,23 +152,24 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
         </Alert>
       )}
 
-      <div className="flex items-center justify-end gap-2">
-        <Button variant="secondary" onClick={onClose}>
-          取消
-        </Button>
-        {preview ? (
-          <Button onClick={() => void create()} loading={creating}>
-            <Download className="size-4" />
-            开始下载
+      {/* 底部操作只在有实际动作时出现：初始态用 × / Esc 关闭即可 */}
+      {(preview || error) && (
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="secondary" onClick={onClose}>
+            取消
           </Button>
-        ) : (
-          error && (
+          {preview ? (
+            <Button onClick={() => void create()} loading={creating}>
+              <Download className="size-4" />
+              开始下载
+            </Button>
+          ) : (
             <Button onClick={() => void create()} loading={creating}>
               仍然添加
             </Button>
-          )
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
