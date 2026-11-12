@@ -2,19 +2,34 @@ import { useEffect, useRef, useState } from "react";
 import { Tasks, type ShardDetail, type Task } from "../mygo";
 import { formatBytes, formatDuration, formatProgress, formatSpeed } from "../lib/format";
 import { cn } from "../lib/utils";
+import { Alert } from "./arc/alert/alert";
 import { Badge } from "./arc/badge/badge";
 import { Button } from "./arc/button/button";
 import { Dialog, DialogContent } from "./arc/dialog/dialog";
 import { Progress } from "./arc/progress/progress";
 import { ProgressIndeterminate } from "./ui";
-import { STATUS_LABEL, statusTone } from "./TaskItem";
+import { STATUS_LABEL, kindBadge, statusTone } from "./TaskItem";
 
 type ShardView = ShardDetail & { speed: number };
+
+/** 详情弹窗里的展示大小：完成后为真实大小（含流式任务回填），进行中为已下载量。 */
+function sizeText(task: Task) {
+  if (task.status === "done") return formatBytes(task.total);
+  if (task.total < 0) return `已下载 ${formatBytes(task.downloaded)}`;
+  return formatProgress(task.downloaded, task.total);
+}
+
+/** 保存格式的展示文案：转换目标大写；流式任务未选格式为自动，直链为原始。 */
+function formatText(task: Task) {
+  if (task.format) return task.format.toUpperCase();
+  return task.kind ? "自动" : "原始";
+}
 
 /**
  * TaskDetail：任务详情弹窗。http 多线程任务展示每个分片的实时进度与
  * 速度（每秒轮询 Tasks.shards，速度由两次轮询的字节差值算出）；
  * HLS 任务展示分片聚合计数；暂停/出错展示最后一次快照（冻结）。
+ * 元信息区展示完整档案：大小/并发/保存格式/创建完成时间/来源等。
  */
 export function TaskDetail({ task, onClose }: { task: Task; onClose: () => void }) {
   const [shards, setShards] = useState<ShardView[]>([]);
@@ -91,15 +106,18 @@ export function TaskDetail({ task, onClose }: { task: Task; onClose: () => void 
             <span className="min-w-0 flex-1 truncate text-sm font-medium" title={task.name}>
               {task.name}
             </span>
-            {isHLS && (
-              <Badge size="sm" color="violet">
-                HLS
-              </Badge>
-            )}
+            {kindBadge(task.kind)}
             <Badge size="sm" tone={statusTone(task.status)}>
               {STATUS_LABEL[task.status]}
             </Badge>
           </div>
+
+          {/* 出错原因置顶展示 */}
+          {task.status === "error" && task.error && (
+            <Alert tone="danger" title="任务出错">
+              {task.error}
+            </Alert>
+          )}
 
           {/* 总览 */}
           <div className="flex flex-col gap-1.5">
@@ -148,22 +166,21 @@ export function TaskDetail({ task, onClose }: { task: Task; onClose: () => void 
             </div>
           )}
 
-          {/* 元信息 */}
+          {/* 元信息档案 */}
           <div className="flex flex-col gap-1 rounded-lg bg-surface-muted/40 p-3 text-xs text-muted">
-            <MetaRow label="链接" value={task.url} />
-            <MetaRow label="保存到" value={task.dir} />
-            <div className="flex items-center justify-between gap-3">
-              <span className="shrink-0 text-muted/70">创建于</span>
-              <span className="min-w-0 truncate">
-                {new Date(task.createdAt).toLocaleString()}
-              </span>
-            </div>
-            {task.status === "done" && (task.duration ?? 0) > 0 && (
-              <div className="flex items-center justify-between gap-3">
-                <span className="shrink-0 text-muted/70">时长</span>
-                <span className="min-w-0 truncate">{formatDuration(task.duration ?? 0)}</span>
-              </div>
+            <MetaRow label="大小" value={sizeText(task)} />
+            <MetaRow label="并发" value={String(task.threads || "默认")} />
+            <MetaRow label="保存格式" value={formatText(task)} />
+            <MetaRow label="创建于" value={new Date(task.createdAt).toLocaleString()} />
+            {task.completedAt && (
+              <MetaRow label="完成于" value={new Date(task.completedAt).toLocaleString()} />
             )}
+            {task.status === "done" && (task.duration ?? 0) > 0 && (
+              <MetaRow label="时长" value={formatDuration(task.duration ?? 0)} />
+            )}
+            {task.referer && <MetaRow label="来源" value={task.referer} />}
+            <MetaRow label="保存到" value={task.dir} />
+            <MetaRow label="链接" value={task.url} />
           </div>
 
           <div className="flex items-center justify-end">
@@ -179,9 +196,9 @@ export function TaskDetail({ task, onClose }: { task: Task; onClose: () => void 
 
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="shrink-0 text-muted/70">{label}</span>
-      <span className="min-w-0 truncate" title={value}>
+    <div className="flex items-baseline gap-3">
+      <span className="w-16 shrink-0 text-muted/70">{label}</span>
+      <span className="min-w-0 flex-1 truncate" title={value}>
         {value}
       </span>
     </div>

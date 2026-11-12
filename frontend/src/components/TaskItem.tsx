@@ -39,6 +39,23 @@ export function statusTone(status: Task["status"]) {
   }
 }
 
+/** kind 徽章：hls / dash 显示对应标签，直链任务不显示。 */
+export function kindBadge(kind?: string) {
+  if (kind === "hls")
+    return (
+      <Badge size="sm" color="violet">
+        HLS
+      </Badge>
+    );
+  if (kind === "dash")
+    return (
+      <Badge size="sm" color="sky">
+        DASH
+      </Badge>
+    );
+  return null;
+}
+
 /** TaskItem：一行任务的完整展示与操作（点击主体打开详情）。 */
 export function TaskItem({
   task,
@@ -68,11 +85,7 @@ export function TaskItem({
       >
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{task.name}</span>
-          {isHLS && (
-            <Badge size="sm" color="violet">
-              HLS
-            </Badge>
-          )}
+          {kindBadge(task.kind)}
           <Badge size="sm" tone={statusTone(task.status)}>
             {STATUS_LABEL[task.status]}
           </Badge>
