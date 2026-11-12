@@ -32,18 +32,17 @@ export function BrowserView() {
             进入网站后，页面里的图片、音视频、压缩包等资源会被自动收集，勾选即可下载
           </p>
         </div>
-        <div className="flex items-end gap-2">
-          <Input
-            label="网址"
-            className="min-w-0 flex-1"
-            autoFocus
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && start()}
-            placeholder="输入网址，如 example.com"
-          />
-          <Button onClick={start}>开始浏览</Button>
-        </div>
+        <Input
+          label="网址"
+          autoFocus
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && start()}
+          placeholder="输入网址，如 example.com"
+        />
+        <Button className="mt-3 w-full" onClick={start}>
+          开始浏览
+        </Button>
         <p className="mt-4 text-center text-[11px] leading-5 text-muted/70">
           网页触发的下载会自动转入下载队列；退出浏览随时回到应用界面
         </p>

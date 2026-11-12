@@ -81,24 +81,26 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-end gap-2">
-        <Input
-          id="new-task-url"
-          label="下载链接（http/https 直链）"
-          className="min-w-0 flex-1"
-          autoFocus
-          placeholder="粘贴链接，回车解析（http/https 直链）"
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && url.trim() && !preview) void parse();
-          }}
-        />
+    <div className="flex flex-col gap-3">
+      <Input
+        id="new-task-url"
+        label="下载链接（http/https 直链）"
+        autoFocus
+        placeholder="粘贴链接，回车解析（http/https 直链）"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && url.trim()) void parse();
+        }}
+      />
+
+      {/* 解析是初始态的主行动：全宽独占一行；解析出结果后让位给预览
+          （编辑链接后回车仍会重新解析） */}
+      {!preview && (
         <Button onClick={() => void parse()} loading={parsing} disabled={!url.trim() || parsing}>
           解析
         </Button>
-      </div>
+      )}
 
       {preview && (
         <div className="rounded-lg bg-surface-muted p-3 text-sm">
