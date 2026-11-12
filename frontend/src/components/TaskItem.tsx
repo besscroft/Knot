@@ -10,16 +10,13 @@ import {
   mediaThumbUrl,
 } from "../lib/format";
 import { cn } from "../lib/utils";
-import {
-  IconCheck,
-  IconFile,
-  IconFolder,
-  IconMusic,
-  IconPause,
-  IconPlay,
-  IconTrash,
-} from "./icons";
-import { EmptyState, IconButton, Progress } from "./ui";
+import { Check, FileText, Folder, Music, Pause, Play, Trash2 } from "lucide-react";
+import { Badge } from "./arc/badge/badge";
+import { Card } from "./arc/card/card";
+import { EmptyState } from "./arc/empty-state/empty-state";
+import { Progress } from "./arc/progress/progress";
+import { Tooltip } from "./arc/tooltip/tooltip";
+import { IconButton, ProgressIndeterminate } from "./ui";
 
 export const STATUS_LABEL: Record<Task["status"], string> = {
   pending: "等待中",
@@ -29,16 +26,16 @@ export const STATUS_LABEL: Record<Task["status"], string> = {
   error: "出错",
 };
 
-export function statusColor(status: Task["status"]) {
+export function statusTone(status: Task["status"]) {
   switch (status) {
     case "running":
-      return "text-accent bg-accent-soft";
+      return "info" as const;
     case "done":
-      return "text-success bg-success/10";
+      return "success" as const;
     case "error":
-      return "text-danger bg-danger/10";
+      return "danger" as const;
     default:
-      return "text-muted bg-panel-2";
+      return "neutral" as const;
   }
 }
 
@@ -61,9 +58,10 @@ export function TaskItem({
     : task.total >= 0
       ? Math.min(1, task.downloaded / task.total)
       : 0;
+  const indeterminate = running && !isHLS && task.total < 0;
 
   return (
-    <div className="group flex items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-panel-2/60">
+    <div className="group flex items-center gap-3 border-b border-border px-4 py-3 transition-colors last:border-b-0 hover:bg-surface-muted/60">
       <div
         className={cn("flex min-w-0 flex-1 flex-col gap-1.5", onDetail && "cursor-pointer")}
         onClick={() => onDetail?.(task)}
@@ -71,24 +69,19 @@ export function TaskItem({
         <div className="flex items-center gap-2">
           <span className="truncate text-sm font-medium">{task.name}</span>
           {isHLS && (
-            <span className="shrink-0 rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] font-medium text-violet-500">
+            <Badge size="sm" color="violet">
               HLS
-            </span>
+            </Badge>
           )}
-          <span
-            className={cn(
-              "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
-              statusColor(task.status),
-            )}
-          >
+          <Badge size="sm" tone={statusTone(task.status)}>
             {STATUS_LABEL[task.status]}
-          </span>
+          </Badge>
         </div>
-        <Progress
-          value={fraction}
-          indeterminate={running && !isHLS && task.total < 0}
-          className="opacity-90"
-        />
+        {indeterminate ? (
+          <ProgressIndeterminate className="opacity-90" />
+        ) : (
+          <Progress value={fraction * 100} className="opacity-90" />
+        )}
         <div className="flex items-center gap-2 text-xs text-muted">
           {isHLS ? (
             <span>
@@ -109,39 +102,46 @@ export function TaskItem({
 
       <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
         {task.status === "running" ? (
-          <IconButton title="暂停" onClick={() => void Tasks.pause(task.id)}>
-            <IconPause className="size-4" />
-          </IconButton>
+          <Tooltip content="暂停">
+            <IconButton onClick={() => void Tasks.pause(task.id)}>
+              <Pause className="size-4" />
+            </IconButton>
+          </Tooltip>
         ) : task.status === "done" ? (
-          <IconButton title="打开文件" onClick={() => void Tasks.openPath(task.id)}>
-            <IconCheck className="size-4" />
-          </IconButton>
+          <Tooltip content="打开文件">
+            <IconButton onClick={() => void Tasks.openPath(task.id)}>
+              <Check className="size-4" />
+            </IconButton>
+          </Tooltip>
         ) : (
-          <IconButton title={task.status === "pending" ? "开始" : "继续"} onClick={() => void Tasks.resume(task.id)}>
-            <IconPlay className="size-4" />
-          </IconButton>
+          <Tooltip content={task.status === "pending" ? "开始" : "继续"}>
+            <IconButton onClick={() => void Tasks.resume(task.id)}>
+              <Play className="size-4" />
+            </IconButton>
+          </Tooltip>
         )}
-        <IconButton title="在文件夹中显示" onClick={() => void Tasks.reveal(task.id)}>
-          <IconFolder className="size-4" />
-        </IconButton>
-        <IconButton
-          title="删除任务"
-          className="hover:text-danger"
-          onClick={() => onRemove(task)}
-        >
-          <IconTrash className="size-4" />
-        </IconButton>
+        <Tooltip content="在文件夹中显示">
+          <IconButton onClick={() => void Tasks.reveal(task.id)}>
+            <Folder className="size-4" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip content="删除任务">
+          <IconButton className="hover:text-danger" onClick={() => onRemove(task)}>
+            <Trash2 className="size-4" />
+          </IconButton>
+        </Tooltip>
       </div>
     </div>
   );
 }
 
-/** TaskList：给定过滤条件的任务列表（含空态）。 */
+/** TaskList：给定过滤条件的任务列表（含空态与可选的空态动作）。 */
 export function TaskList({
   tasks,
   emptyText,
   emptyHint,
   emptyIcon,
+  emptyAction,
   onDetail,
   onRemove,
 }: {
@@ -149,14 +149,22 @@ export function TaskList({
   emptyText: string;
   emptyHint?: string;
   emptyIcon?: ReactNode;
+  emptyAction?: ReactNode;
   onDetail?: (t: Task) => void;
   onRemove: (t: Task) => void;
 }) {
   if (tasks.length === 0) {
-    return <EmptyState icon={emptyIcon} text={emptyText} hint={emptyHint} />;
+    return (
+      <EmptyState
+        title={emptyText}
+        description={emptyHint ?? "列表为空"}
+        icon={emptyIcon}
+        action={emptyAction}
+      />
+    );
   }
   return (
-    <div className="rounded-lg border border-border bg-panel">
+    <div className="rounded-lg border border-border bg-surface">
       {tasks.map((t) => (
         <TaskItem key={t.id} task={t} onDetail={onDetail} onRemove={onRemove} />
       ))}
@@ -183,7 +191,7 @@ export function TaskGrid({
   );
 }
 
-/** TaskCard：单个已完成任务的媒体卡片。 */
+/** TaskCard：单个已完成任务的媒体卡片（Arc Card：自带悬停浮起与封面微缩放）。 */
 export function TaskCard({
   task,
   onPlay,
@@ -205,67 +213,67 @@ export function TaskCard({
     : "";
 
   return (
-    <div className="group overflow-hidden rounded-lg border border-border bg-panel transition-colors hover:border-accent/50">
-      {/* 封面区：图片直出；视频缩略图（404 时露出图标）；音频/其他用图标 */}
-      <button
-        type="button"
-        onClick={() => (playable || kind === "image") && onPlay(task)}
-        className="relative block aspect-video w-full cursor-pointer bg-panel-2/60"
-        title={playable || kind === "image" ? "点击播放/查看" : task.name}
-      >
-        {kind !== "image" && (
-          <div className="flex h-full items-center justify-center text-muted/50">
-            {kind === "audio" ? <IconMusic className="size-9" /> : <IconFile className="size-9" />}
-          </div>
-        )}
-        {(kind === "image" || kind === "video") && (
-          <img
-            src={kind === "image" ? mediaFileUrl(task.id) : mediaThumbUrl(task.id)}
-            loading="lazy"
-            alt={task.name}
-            className="absolute inset-0 h-full w-full object-cover"
-            onError={(e) => {
-              e.currentTarget.style.display = "none";
-            }}
-          />
-        )}
-        {playable && (
-          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-            <span className="flex size-10 items-center justify-center rounded-full bg-black/60 text-white">
-              <IconPlay className="size-5" />
+    <Card
+      className="group"
+      title={task.name}
+      meta={`${formatBytes(task.total)}${when ? ` · ${when}` : ""}`}
+      media={
+        /* 封面区：图片直出；视频缩略图（404 时露出图标）；音频/其他用图标 */
+        <button
+          type="button"
+          onClick={() => (playable || kind === "image") && onPlay(task)}
+          className="relative block aspect-video w-full cursor-pointer"
+          title={playable || kind === "image" ? "点击播放/查看" : task.name}
+        >
+          {kind !== "image" && (
+            <div className="absolute inset-0 flex items-center justify-center text-muted/50">
+              {kind === "audio" ? <Music className="size-9" /> : <FileText className="size-9" />}
+            </div>
+          )}
+          {(kind === "image" || kind === "video") && (
+            <img
+              src={kind === "image" ? mediaFileUrl(task.id) : mediaThumbUrl(task.id)}
+              loading="lazy"
+              alt={task.name}
+              className="absolute inset-0 h-full w-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = "none";
+              }}
+            />
+          )}
+          {playable && (
+            <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+              <span className="flex size-10 items-center justify-center rounded-full bg-black/60 text-white">
+                <Play className="size-5" />
+              </span>
             </span>
-          </span>
-        )}
-        {kind !== "other" && (task.duration ?? 0) > 0 && (
-          <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1 py-0.5 text-[10px] font-medium text-white">
-            {formatDuration(task.duration ?? 0)}
-          </span>
-        )}
-      </button>
-
-      {/* 信息与操作 */}
-      <div className="p-2.5">
-        <div className="truncate text-xs font-medium" title={task.name}>
-          {task.name}
+          )}
+          {kind !== "other" && (task.duration ?? 0) > 0 && (
+            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1 py-0.5 text-[10px] font-medium text-white">
+              {formatDuration(task.duration ?? 0)}
+            </span>
+          )}
+        </button>
+      }
+      action={
+        <div className="flex shrink-0 items-center gap-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <Tooltip content="打开文件">
+            <IconButton className="size-6" onClick={() => void Tasks.openPath(task.id)}>
+              <Check className="size-3.5" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="在文件夹中显示">
+            <IconButton className="size-6" onClick={() => void Tasks.reveal(task.id)}>
+              <Folder className="size-3.5" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip content="删除任务">
+            <IconButton className="size-6 hover:text-danger" onClick={() => onRemove(task)}>
+              <Trash2 className="size-3.5" />
+            </IconButton>
+          </Tooltip>
         </div>
-        <div className="mt-1.5 flex items-center justify-between gap-1">
-          <span className="min-w-0 truncate text-[11px] text-muted">
-            {formatBytes(task.total)}
-            {when && ` · ${when}`}
-          </span>
-          <div className="flex shrink-0 items-center gap-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-            <IconButton title="打开文件" className="size-6" onClick={() => void Tasks.openPath(task.id)}>
-              <IconCheck className="size-3.5" />
-            </IconButton>
-            <IconButton title="在文件夹中显示" className="size-6" onClick={() => void Tasks.reveal(task.id)}>
-              <IconFolder className="size-3.5" />
-            </IconButton>
-            <IconButton title="删除任务" className="size-6 hover:text-danger" onClick={() => onRemove(task)}>
-              <IconTrash className="size-3.5" />
-            </IconButton>
-          </div>
-        </div>
-      </div>
-    </div>
+      }
+    />
   );
 }

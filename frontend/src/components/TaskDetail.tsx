@@ -2,8 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { Tasks, type ShardDetail, type Task } from "../mygo";
 import { formatBytes, formatDuration, formatProgress, formatSpeed } from "../lib/format";
 import { cn } from "../lib/utils";
-import { Button, Modal, Progress } from "./ui";
-import { STATUS_LABEL, statusColor } from "./TaskItem";
+import { Badge } from "./arc/badge/badge";
+import { Button } from "./arc/button/button";
+import { Dialog, DialogContent } from "./arc/dialog/dialog";
+import { Progress } from "./arc/progress/progress";
+import { ProgressIndeterminate } from "./ui";
+import { STATUS_LABEL, statusTone } from "./TaskItem";
 
 type ShardView = ShardDetail & { speed: number };
 
@@ -74,96 +78,102 @@ export function TaskDetail({ task, onClose }: { task: Task; onClose: () => void 
   }, [task.id, running]);
 
   return (
-    <Modal open onClose={onClose} title="任务详情" width={560}>
-      <div className="flex flex-col gap-4">
-        {/* 头部 */}
-        <div className="flex items-center gap-2">
-          <span className="min-w-0 flex-1 truncate text-sm font-medium" title={task.name}>
-            {task.name}
-          </span>
-          {isHLS && (
-            <span className="shrink-0 rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] font-medium text-violet-500">
-              HLS
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent title="任务详情" className="dialog-wide">
+        <div className="flex flex-col gap-4">
+          {/* 头部 */}
+          <div className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-sm font-medium" title={task.name}>
+              {task.name}
             </span>
-          )}
-          <span
-            className={cn(
-              "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium",
-              statusColor(task.status),
+            {isHLS && (
+              <Badge size="sm" color="violet">
+                HLS
+              </Badge>
             )}
-          >
-            {STATUS_LABEL[task.status]}
-          </span>
-        </div>
-
-        {/* 总览 */}
-        <div className="flex flex-col gap-1.5">
-          <Progress value={fraction} indeterminate={running && !isHLS && task.total < 0} />
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
-            <span>
-              {isHLS
-                ? `分片 ${task.segDone ?? 0}/${task.segTotal ?? 0}`
-                : formatProgress(task.downloaded, task.total)}
-            </span>
-            {fraction > 0 && <span>{(fraction * 100).toFixed(1)}%</span>}
-            {task.speed > 0 && <span className="text-accent">{formatSpeed(task.speed)}</span>}
-            {eta > 0 && <span>剩余约 {formatDuration(eta)}</span>}
+            <Badge size="sm" tone={statusTone(task.status)}>
+              {STATUS_LABEL[task.status]}
+            </Badge>
           </div>
-        </div>
 
-        {/* 分片明细 */}
-        {isHLS ? (
-          <div className="rounded-lg border border-border bg-panel-2/40 p-3 text-xs leading-5 text-muted">
-            HLS 分片由并发池下载（{task.threads || "默认"} 并发），逐个分片转瞬即逝，
-            这里展示整体计数：已完成 {task.segDone ?? 0} / 共 {task.segTotal ?? 0} 片。
-            {stale && !running && "（以下载中断时的状态为准）"}
-          </div>
-        ) : shards.length > 0 ? (
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between text-[11px] text-muted">
+          {/* 总览 */}
+          <div className="flex flex-col gap-1.5">
+            {running && !isHLS && task.total < 0 ? (
+              <ProgressIndeterminate />
+            ) : (
+              <Progress value={fraction * 100} />
+            )}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted">
               <span>
-                分片明细（{shards.length} 个）
-                {stale && " · 冻结于暂停前"}
+                {isHLS
+                  ? `分片 ${task.segDone ?? 0}/${task.segTotal ?? 0}`
+                  : formatProgress(task.downloaded, task.total)}
               </span>
-              {running && <span className="animate-pulse">实时刷新中…</span>}
-            </div>
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
-              {shards.map((s) => (
-                <ShardRow key={s.index} shard={s} />
-              ))}
+              {fraction > 0 && <span>{(fraction * 100).toFixed(1)}%</span>}
+              {task.speed > 0 && <span className="text-accent">{formatSpeed(task.speed)}</span>}
+              {eta > 0 && <span>剩余约 {formatDuration(eta)}</span>}
             </div>
           </div>
-        ) : (
-          <div className="rounded-lg border border-border bg-panel-2/40 p-3 text-xs text-muted">
-            暂无分片信息{running && "（等待下载开始…）"}
-          </div>
-        )}
 
-        {/* 元信息 */}
-        <div className="flex flex-col gap-1 rounded-lg border border-border bg-panel-2/40 p-3 text-xs text-muted">
-          <MetaRow label="链接" value={task.url} />
-          <MetaRow label="保存到" value={task.dir} />
-          <div className="flex items-center justify-between gap-3">
-            <span className="shrink-0 text-muted/70">创建于</span>
-            <span className="min-w-0 truncate">
-              {new Date(task.createdAt).toLocaleString()}
-            </span>
-          </div>
-          {task.status === "done" && (task.duration ?? 0) > 0 && (
-            <div className="flex items-center justify-between gap-3">
-              <span className="shrink-0 text-muted/70">时长</span>
-              <span className="min-w-0 truncate">{formatDuration(task.duration ?? 0)}</span>
+          {/* 分片明细 */}
+          {isHLS ? (
+            <div className="rounded-lg bg-surface-muted/40 p-3 text-xs leading-5 text-muted">
+              HLS 分片由并发池下载（{task.threads || "默认"} 并发），逐个分片转瞬即逝，
+              这里展示整体计数：已完成 {task.segDone ?? 0} / 共 {task.segTotal ?? 0} 片。
+              {stale && !running && "（以下载中断时的状态为准）"}
+            </div>
+          ) : shards.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between text-[11px] text-muted">
+                <span>
+                  分片明细（{shards.length} 个）
+                  {stale && " · 冻结于暂停前"}
+                </span>
+                {running && <span className="animate-pulse">实时刷新中…</span>}
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
+                {shards.map((s) => (
+                  <ShardRow key={s.index} shard={s} />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg bg-surface-muted/40 p-3 text-xs text-muted">
+              暂无分片信息{running && "（等待下载开始…）"}
             </div>
           )}
-        </div>
 
-        <div className="flex items-center justify-end">
-          <Button variant="secondary" onClick={onClose}>
-            关闭
-          </Button>
+          {/* 元信息 */}
+          <div className="flex flex-col gap-1 rounded-lg bg-surface-muted/40 p-3 text-xs text-muted">
+            <MetaRow label="链接" value={task.url} />
+            <MetaRow label="保存到" value={task.dir} />
+            <div className="flex items-center justify-between gap-3">
+              <span className="shrink-0 text-muted/70">创建于</span>
+              <span className="min-w-0 truncate">
+                {new Date(task.createdAt).toLocaleString()}
+              </span>
+            </div>
+            {task.status === "done" && (task.duration ?? 0) > 0 && (
+              <div className="flex items-center justify-between gap-3">
+                <span className="shrink-0 text-muted/70">时长</span>
+                <span className="min-w-0 truncate">{formatDuration(task.duration ?? 0)}</span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-end">
+            <Button variant="secondary" onClick={onClose}>
+              关闭
+            </Button>
+          </div>
         </div>
-      </div>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -186,7 +196,7 @@ function ShardRow({ shard }: { shard: ShardView }) {
   const state = done
     ? { label: "完成", dot: "bg-success" }
     : shard.retrying > 0
-      ? { label: `重试中 ×${shard.retrying}`, dot: "bg-orange-500" }
+      ? { label: `重试中 ×${shard.retrying}`, dot: "bg-warning" }
       : shard.active
         ? { label: "下载中", dot: "bg-accent animate-pulse" }
         : { label: "等待", dot: "bg-muted/50" };
@@ -195,7 +205,7 @@ function ShardRow({ shard }: { shard: ShardView }) {
     <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5 text-xs last:border-b-0">
       <span className={cn("size-1.5 shrink-0 rounded-full", state.dot)} title={state.label} />
       <span className="w-7 shrink-0 text-muted">#{shard.index}</span>
-      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-panel-2">
+      <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-surface-muted">
         <div
           className="h-full rounded-full bg-accent transition-[width] duration-200"
           style={{ width: `${fraction * 100}%` }}

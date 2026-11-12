@@ -70,7 +70,7 @@ func createMainWindow() *mygo.Window {
 		Height:          800,
 		MinWidth:        960,
 		MinHeight:       640,
-		BackgroundColor: "light-dark(#f7f8fa, #141414)", // 与前端 --bg 一致
+		BackgroundColor: "light-dark(#ffffff, #141414)", // 与 Arc 令牌 --background 一致（浅色 oklch(100%)，深色 oklch(19%)）
 		// 记住上次的位置与大小。
 		StateKey: "main",
 		// dev 时加载 devUrl（Vite+ 开发服务器），打包后加载内嵌的 frontendDist。

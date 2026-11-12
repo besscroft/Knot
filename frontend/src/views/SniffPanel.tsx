@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
+import { Download, RefreshCw, Search, X } from "lucide-react";
 import { Browser, events, type BilibiliInfo, type DownloadRequest, type Sniffed } from "../mygo";
-import { IconDownload, IconRefresh, IconSearch, IconX } from "../components/icons";
-import { Button, IconButton, Input, Modal } from "../components/ui";
+import { Alert } from "../components/arc/alert/alert";
+import { Badge } from "../components/arc/badge/badge";
+import { Button } from "../components/arc/button/button";
+import { Checkbox } from "../components/arc/checkbox/checkbox";
+import { Dialog, DialogContent } from "../components/arc/dialog/dialog";
+import { Input } from "../components/arc/input/input";
+import { Select } from "../components/arc/select/select";
+import { IconButton } from "../components/ui";
 import { formatBytes } from "../lib/format";
 import { cn } from "../lib/utils";
 
@@ -18,17 +25,15 @@ const TYPE_LABEL: Record<string, string> = {
   other: "其他",
 };
 
-const TYPE_COLOR: Record<string, string> = {
-  info: "text-muted bg-panel-2",
-  bili: "text-[#fb7299] bg-[#fb7299]/10",
-  hls: "text-danger bg-danger/10",
-  video: "text-violet-500 bg-violet-500/10",
-  audio: "text-cyan-500 bg-cyan-500/10",
-  image: "text-accent bg-accent-soft",
-  archive: "text-orange-500 bg-orange-500/10",
-  document: "text-success bg-success/10",
-  link: "text-muted bg-panel-2",
-  other: "text-muted bg-panel-2",
+/** 资源类型 → Arc Badge 的色调（沿用原配色意图：B站粉/视频紫/音频青/压缩包橙…）。 */
+const TYPE_TONE: Record<string, { tone?: "neutral" | "success" | "info" | "danger"; color?: "teal" | "sky" | "orchid" | "violet" | "rose" | "amber" }> = {
+  bili: { color: "rose" },
+  hls: { tone: "danger" },
+  video: { color: "violet" },
+  audio: { color: "teal" },
+  image: { tone: "info" },
+  archive: { color: "amber" },
+  document: { tone: "success" },
 };
 
 /**
@@ -124,34 +129,37 @@ export function SniffPanel() {
   const current = requests[0];
 
   return (
-    <div className="flex h-full flex-col bg-panel text-text">
+    <div className="flex h-full flex-col bg-surface text-foreground">
       {/* 标题栏：可拖动 */}
       <div
         className="flex h-9 shrink-0 items-center justify-between border-b border-border px-3"
         style={{ ["--app-region" as string]: "drag" } as React.CSSProperties}
       >
         <span className="text-xs font-semibold text-muted">资源嗅探</span>
-        <div className="flex items-center" style={{ ["--app-region" as string]: "no-drag" } as React.CSSProperties}>
+        <div
+          className="flex items-center"
+          style={{ ["--app-region" as string]: "no-drag" } as React.CSSProperties}
+        >
           <IconButton title="重新嗅探" onClick={rescan} disabled={scanning} className="size-6">
-            <IconRefresh className={cn("size-3.5", scanning && "animate-spin")} />
+            <RefreshCw className={cn("size-3.5", scanning && "animate-spin")} />
           </IconButton>
           <IconButton title="收起（可从工具栏重新打开）" onClick={() => void Browser.hidePanel()} className="size-6">
-            <IconX className="size-3.5" />
+            <X className="size-3.5" />
           </IconButton>
         </div>
       </div>
 
       {/* B 站视频页专用条目：DASH 分轨嗅探不到整段地址，走画质选择弹窗 */}
       {biliEntry && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-panel-2/40 px-2.5 py-2">
-          <span className={cn("shrink-0 rounded px-1 py-0.5 text-[10px] font-medium", TYPE_COLOR.bili)}>
+        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface-muted/40 px-2.5 py-2">
+          <Badge size="sm" {...TYPE_TONE.bili}>
             {TYPE_LABEL.bili}
-          </span>
+          </Badge>
           <span className="min-w-0 flex-1 truncate text-xs font-medium" title={biliEntry.name}>
             {biliEntry.name}
           </span>
-          <Button className="h-6 shrink-0 px-2 text-[11px]" onClick={() => setBiliOpen(true)}>
-            <IconDownload className="size-3" />
+          <Button size="sm" className="shrink-0" onClick={() => setBiliOpen(true)}>
+            <Download className="size-3.5" />
             下载
           </Button>
         </div>
@@ -161,7 +169,7 @@ export function SniffPanel() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {items.length === 0 && !biliEntry ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
-            <IconSearch className="size-7 opacity-40" />
+            <Search className="size-7 opacity-40" />
             <div className="text-xs">暂未嗅探到资源</div>
             <div className="text-[11px] text-muted/70">页面加载完会自动扫描，也可点右上角刷新</div>
           </div>
@@ -169,25 +177,25 @@ export function SniffPanel() {
           items.map((s) => {
             if (s.type === "info") {
               return (
-                <div key="info" className="border-b border-border bg-panel-2/40 px-2.5 py-1.5 text-[11px] text-muted">
+                <div key="info" className="border-b border-border bg-surface-muted/40 px-2.5 py-1.5 text-[11px] text-muted">
                   {s.name}
                 </div>
               );
             }
+            const tone = TYPE_TONE[s.type] ?? {};
             return (
               <label
                 key={s.url}
-                className="flex cursor-pointer items-center gap-2 border-b border-border px-2.5 py-1.5 transition-colors last:border-b-0 hover:bg-panel-2/60"
+                className="flex cursor-pointer items-center gap-2 border-b border-border px-2.5 py-1.5 transition-colors last:border-b-0 hover:bg-surface-muted/60"
               >
-                <input
-                  type="checkbox"
-                  className="size-3.5 accent-[var(--accent)]"
+                <Checkbox
+                  aria-label={`选择 ${s.name}`}
                   checked={selected.has(s.url)}
-                  onChange={() => toggle(s.url)}
+                  onCheckedChange={() => toggle(s.url)}
                 />
-                <span className={cn("shrink-0 rounded px-1 py-0.5 text-[10px] font-medium", TYPE_COLOR[s.type] ?? TYPE_COLOR.other)}>
+                <Badge size="sm" {...tone}>
                   {TYPE_LABEL[s.type] ?? s.type}
-                </span>
+                </Badge>
                 <span className="min-w-0 flex-1 truncate text-xs" title={s.url}>
                   {s.name}
                 </span>
@@ -195,11 +203,12 @@ export function SniffPanel() {
                   title="下载"
                   className="size-6 shrink-0"
                   onClick={(e) => {
-                    e.preventDefault();
+                    e.preventDefault(); // 阻止 label 联动勾选框
+                    e.stopPropagation();
                     enqueue({ url: s.url, name: s.name, referer: s.page });
                   }}
                 >
-                  <IconDownload className="size-3.5" />
+                  <Download className="size-3.5" />
                 </IconButton>
               </label>
             );
@@ -214,15 +223,14 @@ export function SniffPanel() {
           {requests.length > 0 && <span className="ml-1.5 text-accent">{requests.length} 个待确认</span>}
           {queued && requests.length === 0 && <span className="ml-1.5 text-success">已入队</span>}
         </span>
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={downloadSelected}
           disabled={selected.size === 0}
-          className="inline-flex h-6 items-center gap-1 rounded-md bg-accent px-2 text-[11px] font-medium text-white hover:opacity-90 disabled:pointer-events-none disabled:opacity-40"
         >
-          <IconDownload className="size-3" />
+          <Download className="size-3.5" />
           下载所选
-        </button>
+        </Button>
       </div>
 
       {/* 下载确认框：逐个确认，key 保证每个请求的输入状态全新 */}
@@ -259,19 +267,19 @@ function DownloadConfirm({
   const [name, setName] = useState(req.name);
 
   return (
-    <Modal
+    <Dialog
       open
-      onClose={onCancel}
-      title={pending > 1 ? `保存文件（还有 ${pending - 1} 个待确认）` : "保存文件"}
-      width={330}
+      onOpenChange={(next) => {
+        if (!next) onCancel();
+      }}
     >
-      <div className="flex flex-col gap-3">
-        <div>
-          <label className="mb-1 block text-xs text-muted" htmlFor="download-confirm-name">
-            文件名
-          </label>
+      <DialogContent
+        title={pending > 1 ? `保存文件（还有 ${pending - 1} 个待确认）` : "保存文件"}
+      >
+        <div className="flex flex-col gap-3">
           <Input
             id="download-confirm-name"
+            label="文件名"
             autoFocus
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -280,23 +288,22 @@ function DownloadConfirm({
               if (e.key === "Enter") onConfirm(name.trim());
             }}
             placeholder="留空则从链接自动推断"
-            className="h-8"
           />
+          <div className="truncate text-xs text-muted/70" title={req.url}>
+            {req.url}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="secondary" onClick={onCancel}>
+              取消
+            </Button>
+            <Button onClick={() => onConfirm(name.trim())}>
+              <Download className="size-4" />
+              下载
+            </Button>
+          </div>
         </div>
-        <div className="truncate text-xs text-muted/70" title={req.url}>
-          {req.url}
-        </div>
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="secondary" onClick={onCancel}>
-            取消
-          </Button>
-          <Button onClick={() => onConfirm(name.trim())}>
-            <IconDownload className="size-4" />
-            下载
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -346,70 +353,68 @@ function BilibiliDialog({
     }
   }
 
-  const selectCls =
-    "h-8 w-full rounded-md border border-border bg-panel px-2 text-sm text-text focus:border-accent focus:outline-none";
-
   return (
-    <Modal open onClose={onClose} title="哔哩哔哩视频下载" width={352}>
-      <div className="flex flex-col gap-3">
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium" title={entry.name}>
-            {entry.name}
-          </div>
-          {info && (
-            <div className="mt-0.5 text-[11px] text-muted">
-              {info.pages > 1 && `P${info.page}/${info.pages} · `}
-              {info.dash ? "DASH 分轨，视频+音频自动合流" : "旧版单文件直链"}
-              {info.dash && info.audio && ` · ${info.audio}`}
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+    >
+      <DialogContent title="哔哩哔哩视频下载">
+        <div className="flex flex-col gap-3">
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium" title={entry.name}>
+              {entry.name}
             </div>
-          )}
-        </div>
-        {!info && !error && <div className="text-xs text-muted">正在读取画质信息…</div>}
-        {error && <div className="rounded-md bg-danger/10 px-2 py-1.5 text-xs text-danger">{error}</div>}
-        {info && (
-          <>
-            {info.dash ? (
-              <label className="flex flex-col gap-1">
-                <span className="text-xs text-muted">画质</span>
-                <select
-                  value={quality}
-                  onChange={(e) => setQuality(Number(e.target.value))}
-                  className={selectCls}
-                >
-                  {info.qualities.map((q) => (
-                    <option key={q.id} value={q.id}>
-                      {q.desc}
-                      {q.size > 0 ? ` · 约 ${formatBytes(q.size)}` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : (
-              info.qualities[0] && (
-                <div className="text-[11px] text-muted">
-                  原始画质{info.qualities[0].size > 0 ? ` · ${formatBytes(info.qualities[0].size)}` : ""}
-                </div>
-              )
+            {info && (
+              <div className="mt-0.5 text-[11px] text-muted">
+                {info.pages > 1 && `P${info.page}/${info.pages} · `}
+                {info.dash ? "DASH 分轨，视频+音频自动合流" : "旧版单文件直链"}
+                {info.dash && info.audio && ` · ${info.audio}`}
+              </div>
             )}
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-muted">格式</span>
-              <select value={format} onChange={(e) => setFormat(e.target.value)} className={selectCls}>
-                <optgroup label="视频容器">
-                  <option value="mp4">MP4</option>
-                  <option value="mkv">MKV</option>
-                  <option value="mov">MOV</option>
-                  <option value="webm">WebM（可能需转码）</option>
-                </optgroup>
-                <optgroup label="仅提取音频">
-                  <option value="m4a">M4A</option>
-                  <option value="mp3">MP3</option>
-                  <option value="flac">FLAC</option>
-                </optgroup>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-xs text-muted">文件名</span>
+          </div>
+          {!info && !error && <div className="text-xs text-muted">正在读取画质信息…</div>}
+          {error && (
+            <Alert tone="danger" title="读取失败">
+              {error}
+            </Alert>
+          )}
+          {info && (
+            <>
+              {info.dash ? (
+                <Select
+                  label="画质"
+                  value={String(quality)}
+                  onValueChange={(v) => setQuality(Number(v))}
+                  options={info.qualities.map((q) => ({
+                    value: String(q.id),
+                    label: `${q.desc}${q.size > 0 ? ` · 约 ${formatBytes(q.size)}` : ""}`,
+                  }))}
+                />
+              ) : (
+                info.qualities[0] && (
+                  <div className="text-[11px] text-muted">
+                    原始画质{info.qualities[0].size > 0 ? ` · ${formatBytes(info.qualities[0].size)}` : ""}
+                  </div>
+                )
+              )}
+              <Select
+                label="格式"
+                value={format}
+                onValueChange={setFormat}
+                options={[
+                  { value: "mp4", label: "视频 · MP4" },
+                  { value: "mkv", label: "视频 · MKV" },
+                  { value: "mov", label: "视频 · MOV" },
+                  { value: "webm", label: "视频 · WebM（可能需转码）" },
+                  { value: "m4a", label: "仅音频 · M4A" },
+                  { value: "mp3", label: "仅音频 · MP3" },
+                  { value: "flac", label: "仅音频 · FLAC" },
+                ]}
+              />
               <Input
+                label="文件名"
                 autoFocus
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -417,21 +422,20 @@ function BilibiliDialog({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !busy) void submit();
                 }}
-                className="h-8"
               />
-            </label>
-          </>
-        )}
-        <div className="flex items-center justify-end gap-2">
-          <Button variant="secondary" onClick={onClose}>
-            取消
-          </Button>
-          <Button onClick={() => void submit()} disabled={!info || busy}>
-            <IconDownload className="size-4" />
-            {busy ? "正在入队…" : "下载"}
-          </Button>
+            </>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="secondary" onClick={onClose}>
+              取消
+            </Button>
+            <Button onClick={() => void submit()} loading={busy} disabled={!info || busy}>
+              <Download className="size-4" />
+              下载
+            </Button>
+          </div>
         </div>
-      </div>
-    </Modal>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import Player from "xgplayer";
 import "xgplayer/dist/index.min.css";
+import { ExternalLink, X } from "lucide-react";
 import { Tasks, type Task } from "../mygo";
-import { Button } from "./ui";
-import { IconExternal, IconX } from "./icons";
+import { Button } from "./arc/button/button";
+import { IconButton } from "./ui";
 import { mediaFileUrl, mediaKindOf } from "../lib/format";
 
 /**
@@ -62,23 +63,21 @@ export function MediaViewer({ task, onClose }: { task: Task; onClose: () => void
         <span className="min-w-0 truncate text-sm text-white/90" title={task.name}>
           {task.name}
         </span>
-        <div className="flex shrink-0 items-center gap-1 text-white/80">
-          <button
-            type="button"
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton
             title="用系统播放器打开"
+            className="text-white/80 hover:bg-white/15 hover:text-white"
             onClick={() => void Tasks.openPath(task.id)}
-            className="rounded-md p-1.5 transition-colors hover:bg-white/15 hover:text-white"
           >
-            <IconExternal className="size-4" />
-          </button>
-          <button
-            type="button"
+            <ExternalLink className="size-4" />
+          </IconButton>
+          <IconButton
             title="关闭（Esc）"
+            className="text-white/80 hover:bg-white/15 hover:text-white"
             onClick={onClose}
-            className="rounded-md p-1.5 transition-colors hover:bg-white/15 hover:text-white"
           >
-            <IconX className="size-5" />
-          </button>
+            <X className="size-5" />
+          </IconButton>
         </div>
       </div>
 
@@ -92,7 +91,7 @@ export function MediaViewer({ task, onClose }: { task: Task; onClose: () => void
         <div className="flex flex-col items-center gap-3">
           <div className="text-sm text-white/80">无法在应用内播放该格式，可尝试系统播放器</div>
           <Button variant="secondary" onClick={() => void Tasks.openPath(task.id)}>
-            <IconExternal className="size-4" />
+            <ExternalLink className="size-4" />
             用系统播放器打开
           </Button>
         </div>

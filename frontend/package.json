@@ -10,8 +10,15 @@
     "preview": "vp preview"
   },
   "dependencies": {
+    "@radix-ui/react-checkbox": "^1.4.1",
+    "@radix-ui/react-dialog": "^1.3.1",
+    "@radix-ui/react-select": "^2.4.1",
+    "@radix-ui/react-switch": "^1.4.1",
+    "@radix-ui/react-tooltip": "^1.4.1",
     "@tailwindcss/vite": "^4.3.5",
     "clsx": "^2.1.1",
+    "lucide-react": "^1.71.0",
+    "motion": "^14.12.0",
     "mygo-runtime": "^0.8.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

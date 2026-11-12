@@ -1,47 +1,44 @@
 @import "tailwindcss";
+/* Arc UI 设计令牌：全部颜色/圆角/间距/动效令牌由此提供（src/components/arc/foundation.css）。 */
+@import "./components/arc/foundation.css";
 
-/* Knot 的设计令牌：跟随系统的深浅色，与 main.go 里 window.BackgroundColor 一致 */
+/*
+ * 主题机制：深浅色由 <html data-theme="light|dark"> 驱动（index.html 首帧前按系统偏好设定，
+ * main.tsx 监听后续变化），主色为 data-accent="blue"。main.go 的窗口背景色与 --background 保持一致。
+ */
+
+/* 中文应用字体：覆盖 Arc 默认的 Geist/Inter（中文环境走系统栈）。 */
 :root {
-  color-scheme: light dark;
-  --bg: #f7f8fa;
-  --panel: #ffffff;
-  --panel-2: #f1f2f5;
-  --border: #e4e6ea;
-  --text: #1c1e21;
-  --muted: #6b7280;
-  --accent: #2563eb;
-  --accent-soft: #dbeafe;
-  --danger: #dc2626;
-  --success: #16a34a;
+  --font-display:
+    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-body:
+    system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #141414;
-    --panel: #1d1d20;
-    --panel-2: #26262b;
-    --border: #323238;
-    --text: #e8e8ea;
-    --muted: #9ca3af;
-    --accent: #3b82f6;
-    --accent-soft: #1e3a5f;
-    --danger: #ef4444;
-    --success: #22c55e;
-  }
-}
-
+/* Tailwind 语义色 → Arc 令牌桥接：视图层用 bg-surface / text-muted 等工具类。 */
 @theme inline {
-  --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-panel-2: var(--panel-2);
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-secondary: var(--text-secondary);
+  --color-muted: var(--text-muted);
   --color-border: var(--border);
-  --color-text: var(--text);
-  --color-muted: var(--muted);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
   --color-accent: var(--accent);
-  --color-accent-soft: var(--accent-soft);
-  --color-danger: var(--danger);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-subtle);
+  --color-accent-foreground: var(--accent-foreground);
   --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
 }
+
+/* dark: 变体跟随 Arc 的 data-theme 属性（配合桥接令牌，语义色本身已自动切换）。 */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 html,
 body,
@@ -51,15 +48,9 @@ body,
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    "PingFang SC",
-    "Microsoft YaHei",
-    sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
@@ -70,9 +61,15 @@ textarea {
   user-select: text;
 }
 
-/* 未知大小的流动进度条 */
+/* 未知大小的流动进度条（Arc Progress 不含 indeterminate，Knot 自留此实现）。 */
 .progress-indeterminate {
   animation: progress-slide 1.2s ease-in-out infinite;
+}
+
+/* Arc Dialog 默认宽 min(calc(100vw - 2rem), 440px)。需要更宽的弹窗（如任务详情）
+   加 dialog-wide 类：属性选择器抬高优先级，压过 dialog.module.css 的 .content。 */
+[role="dialog"].dialog-wide {
+  width: min(calc(100vw - var(--space-8)), 600px);
 }
 
 @keyframes progress-slide {
