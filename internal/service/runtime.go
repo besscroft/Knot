@@ -74,12 +74,17 @@ func Init() error {
 
 	StartMediaServer() // loopback 媒体服务：文件与封面（大文件必须真流式，见 media.go）
 
-	// 旧版本完成的媒体任务没有时长：后台逐个回填。
+	// 旧版本完成的任务可能没有时长，或流式任务（HLS/DASH）没有大小：
+	// 后台逐个回填。
 	go func() {
 		for _, t := range mgr.List() {
-			if t.Status == engine.StatusDone {
-				mgr.EnsureDuration(t.ID)
+			if t.Status != engine.StatusDone {
+				continue
 			}
+			if t.Total < 0 {
+				mgr.EnsureTotal(t.ID)
+			}
+			mgr.EnsureDuration(t.ID)
 		}
 	}()
 

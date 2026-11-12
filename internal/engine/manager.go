@@ -381,6 +381,10 @@ func (m *Manager) runTask(ctx context.Context, e *entry) {
 		e.task.Speed = 0
 		if total := e.task.Total; total >= 0 {
 			e.task.Downloaded = total
+		} else if info, err := os.Stat(e.task.Path()); err == nil && info.Size() > 0 {
+			// HLS/DASH 等流式任务下载时无 content-length：完成后按落盘文件回填真实大小
+			e.task.Total = info.Size()
+			e.task.Downloaded = info.Size()
 		}
 		if t.Kind == "hls" {
 			e.task.SegDone = e.task.SegTotal // HLS 完成时分片数对齐
@@ -430,6 +434,39 @@ func (m *Manager) EnsureDuration(id string) {
 		return
 	}
 	e.task.Duration = d
+	snapshot := e.task
+	m.mu.Unlock()
+
+	m.persist()
+	m.fire(snapshot)
+}
+
+// EnsureTotal 确保 done 任务的展示大小与磁盘文件一致（HLS/DASH 等流式任务
+// 下载时无 content-length，total=-1，完成后按落盘文件回填；任务完成时与
+// 启动回填共用）。文件不存在时不回填（可能已被外部删除）。
+func (m *Manager) EnsureTotal(id string) {
+	m.mu.Lock()
+	e, ok := m.tasks[id]
+	if !ok || e.task.Status != StatusDone || e.task.Total >= 0 {
+		m.mu.Unlock()
+		return
+	}
+	path := e.task.Path()
+	m.mu.Unlock()
+
+	info, err := os.Stat(path)
+	if err != nil || info.Size() <= 0 {
+		return
+	}
+
+	m.mu.Lock()
+	e, ok = m.tasks[id]
+	if !ok || e.task.Status != StatusDone || e.task.Total >= 0 {
+		m.mu.Unlock()
+		return
+	}
+	e.task.Total = info.Size()
+	e.task.Downloaded = info.Size()
 	snapshot := e.task
 	m.mu.Unlock()
 
