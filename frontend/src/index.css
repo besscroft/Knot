@@ -83,6 +83,18 @@ textarea {
   width: min(calc(100vw - var(--space-8)), 600px);
 }
 
+/* 任务卡片紧凑化：收窄 Arc Card 的内容留白与标题字号（仅作用于 .task-media-card，
+   结构上 .content 是 media 之后的第二个子 div）。 */
+.task-media-card > div:nth-child(2) {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+.task-media-card h3 {
+  overflow: hidden;
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 @keyframes progress-slide {
   0% {
     transform: translateX(-120%);

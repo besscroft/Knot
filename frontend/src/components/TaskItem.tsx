@@ -214,9 +214,8 @@ export function TaskCard({
 
   return (
     <Card
-      className="group"
+      className="group task-media-card"
       title={task.name}
-      meta={`${formatBytes(task.total)}${when ? ` · ${when}` : ""}`}
       media={
         <div className="relative w-full">
           {/* 封面区：图片直出；视频缩略图（404 时露出图标）；音频/其他用图标 */}
@@ -285,6 +284,15 @@ export function TaskCard({
           </div>
         </div>
       }
-    />
+    >
+      {/* 信息行：紧凑自排，不走 Card footer（其默认间距对 4 列小卡片太松） */}
+      <p
+        className="mt-1.5 truncate text-xs text-muted"
+        title={`${formatBytes(task.total)}${when ? ` · ${when}` : ""}`}
+      >
+        {formatBytes(task.total)}
+        {when && ` · ${when}`}
+      </p>
+    </Card>
   );
 }
