@@ -15,6 +15,17 @@
     system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
+/* Knot 紧凑化：控件整体比 Arc 默认小一档（高度 -8px 左右，圆角按比例收敛）。
+   所有 Arc 组件都读这些令牌，改这里即可全局生效。 */
+:root {
+  --control-height-sm: 1.875rem; /* 30px */
+  --control-height-md: 2.25rem; /* 36px */
+  --control-height-lg: 2.5rem; /* 40px */
+  --radius-control: 0.875rem; /* 14px */
+  --radius-panel: 1.25rem; /* 20px */
+  --radius-surface: 1.5rem; /* 24px */
+}
+
 /* Tailwind 语义色 → Arc 令牌桥接：视图层用 bg-surface / text-muted 等工具类。 */
 @theme inline {
   --color-background: var(--background);

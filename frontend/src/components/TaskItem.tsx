@@ -183,7 +183,7 @@ export function TaskGrid({
   onRemove: (t: Task) => void;
 }) {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3">
+    <div className="grid grid-cols-4 gap-3">
       {tasks.map((t) => (
         <TaskCard key={t.id} task={t} onPlay={onPlay} onRemove={onRemove} />
       ))}
@@ -218,60 +218,71 @@ export function TaskCard({
       title={task.name}
       meta={`${formatBytes(task.total)}${when ? ` · ${when}` : ""}`}
       media={
-        /* 封面区：图片直出；视频缩略图（404 时露出图标）；音频/其他用图标 */
-        <button
-          type="button"
-          onClick={() => (playable || kind === "image") && onPlay(task)}
-          className="relative block aspect-video w-full cursor-pointer"
-          title={playable || kind === "image" ? "点击播放/查看" : task.name}
-        >
-          {kind !== "image" && (
-            <div className="absolute inset-0 flex items-center justify-center text-muted/50">
-              {kind === "audio" ? <Music className="size-9" /> : <FileText className="size-9" />}
-            </div>
-          )}
-          {(kind === "image" || kind === "video") && (
-            <img
-              src={kind === "image" ? mediaFileUrl(task.id) : mediaThumbUrl(task.id)}
-              loading="lazy"
-              alt={task.name}
-              className="absolute inset-0 h-full w-full object-cover"
-              onError={(e) => {
-                e.currentTarget.style.display = "none";
-              }}
-            />
-          )}
-          {playable && (
-            <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
-              <span className="flex size-10 items-center justify-center rounded-full bg-black/60 text-white">
-                <Play className="size-5" />
+        <div className="relative w-full">
+          {/* 封面区：图片直出；视频缩略图（404 时露出图标）；音频/其他用图标 */}
+          <button
+            type="button"
+            onClick={() => (playable || kind === "image") && onPlay(task)}
+            className="relative block aspect-video w-full cursor-pointer"
+            title={playable || kind === "image" ? "点击播放/查看" : task.name}
+          >
+            {kind !== "image" && (
+              <div className="absolute inset-0 flex items-center justify-center text-muted/50">
+                {kind === "audio" ? <Music className="size-9" /> : <FileText className="size-9" />}
+              </div>
+            )}
+            {(kind === "image" || kind === "video") && (
+              <img
+                src={kind === "image" ? mediaFileUrl(task.id) : mediaThumbUrl(task.id)}
+                loading="lazy"
+                alt={task.name}
+                className="absolute inset-0 h-full w-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            )}
+            {playable && (
+              <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="flex size-10 items-center justify-center rounded-full bg-black/60 text-white">
+                  <Play className="size-5" />
+                </span>
               </span>
-            </span>
-          )}
-          {kind !== "other" && (task.duration ?? 0) > 0 && (
-            <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1 py-0.5 text-[10px] font-medium text-white">
-              {formatDuration(task.duration ?? 0)}
-            </span>
-          )}
-        </button>
-      }
-      action={
-        <div className="flex shrink-0 items-center gap-0 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-          <Tooltip content="打开文件">
-            <IconButton className="size-6" onClick={() => void Tasks.openPath(task.id)}>
-              <Check className="size-3.5" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="在文件夹中显示">
-            <IconButton className="size-6" onClick={() => void Tasks.reveal(task.id)}>
-              <Folder className="size-3.5" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip content="删除任务">
-            <IconButton className="size-6 hover:text-danger" onClick={() => onRemove(task)}>
-              <Trash2 className="size-3.5" />
-            </IconButton>
-          </Tooltip>
+            )}
+            {kind !== "other" && (task.duration ?? 0) > 0 && (
+              <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1 py-0.5 text-[10px] font-medium text-white">
+                {formatDuration(task.duration ?? 0)}
+              </span>
+            )}
+          </button>
+
+          {/* 悬停操作：浮在封面右上角，不占下方信息行的空间 */}
+          <div className="absolute right-2 top-2 flex items-center gap-0.5 rounded-full bg-black/55 p-0.5 opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+            <Tooltip content="打开文件">
+              <IconButton
+                className="size-6 text-white/85 hover:bg-white/20! hover:text-white!"
+                onClick={() => void Tasks.openPath(task.id)}
+              >
+                <Check className="size-3.5" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip content="在文件夹中显示">
+              <IconButton
+                className="size-6 text-white/85 hover:bg-white/20! hover:text-white!"
+                onClick={() => void Tasks.reveal(task.id)}
+              >
+                <Folder className="size-3.5" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip content="删除任务">
+              <IconButton
+                className="size-6 text-white/85 hover:bg-white/20! hover:text-white!"
+                onClick={() => onRemove(task)}
+              >
+                <Trash2 className="size-3.5" />
+              </IconButton>
+            </Tooltip>
+          </div>
         </div>
       }
     />

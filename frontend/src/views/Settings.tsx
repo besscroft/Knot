@@ -107,7 +107,7 @@ export function SettingsView() {
   }
 
   return (
-    <div className="mx-auto h-full max-w-xl overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto p-6">
       <h1 className="mb-6 text-lg font-semibold">设置</h1>
 
       <div className="flex flex-col gap-6">
@@ -163,33 +163,36 @@ export function SettingsView() {
           onChange={(e) => update({ proxy: e.target.value })}
         />
 
-        <Select
-          label="视频默认格式"
-          description="新建视频任务未选择时的默认容器"
-          value={data.videoFormat || VIDEO_FORMAT_DEFAULT}
-          onValueChange={(v) => update({ videoFormat: v === VIDEO_FORMAT_DEFAULT ? "" : v })}
-          options={[
-            { value: VIDEO_FORMAT_DEFAULT, label: "MP4（默认）" },
-            { value: "mkv", label: "MKV" },
-            { value: "mov", label: "MOV" },
-            { value: "webm", label: "WebM（需源编码兼容）" },
-          ]}
-        />
+        {/* 默认格式：两个下拉并排 */}
+        <div className="grid grid-cols-2 gap-6">
+          <Select
+            label="视频默认格式"
+            description="新建视频任务未选择时的默认容器"
+            value={data.videoFormat || VIDEO_FORMAT_DEFAULT}
+            onValueChange={(v) => update({ videoFormat: v === VIDEO_FORMAT_DEFAULT ? "" : v })}
+            options={[
+              { value: VIDEO_FORMAT_DEFAULT, label: "MP4（默认）" },
+              { value: "mkv", label: "MKV" },
+              { value: "mov", label: "MOV" },
+              { value: "webm", label: "WebM（需源编码兼容）" },
+            ]}
+          />
 
-        <Select
-          label="音频默认格式"
-          description="纯音频链接未选择时的默认格式"
-          value={data.audioFormat || AUDIO_FORMAT_DEFAULT}
-          onValueChange={(v) => update({ audioFormat: v === AUDIO_FORMAT_DEFAULT ? "" : v })}
-          options={[
-            { value: AUDIO_FORMAT_DEFAULT, label: "不转换（原样保存）" },
-            { value: "m4a", label: "M4A" },
-            { value: "mp3", label: "MP3" },
-            { value: "opus", label: "Opus" },
-            { value: "flac", label: "FLAC" },
-            { value: "wav", label: "WAV" },
-          ]}
-        />
+          <Select
+            label="音频默认格式"
+            description="纯音频链接未选择时的默认格式"
+            value={data.audioFormat || AUDIO_FORMAT_DEFAULT}
+            onValueChange={(v) => update({ audioFormat: v === AUDIO_FORMAT_DEFAULT ? "" : v })}
+            options={[
+              { value: AUDIO_FORMAT_DEFAULT, label: "不转换（原样保存）" },
+              { value: "m4a", label: "M4A" },
+              { value: "mp3", label: "MP3" },
+              { value: "opus", label: "Opus" },
+              { value: "flac", label: "FLAC" },
+              { value: "wav", label: "WAV" },
+            ]}
+          />
+        </div>
 
         {/* FFmpeg */}
         <div className="flex flex-col gap-1.5">
