@@ -39,7 +39,7 @@ export function statusTone(status: Task["status"]) {
   }
 }
 
-/** kind 徽章：hls / dash 显示对应标签，直链任务不显示。 */
+/** kind 徽章：hls / dash / yt 显示对应标签，直链任务不显示。 */
 export function kindBadge(kind?: string) {
   if (kind === "hls")
     return (
@@ -51,6 +51,12 @@ export function kindBadge(kind?: string) {
     return (
       <Badge size="sm" color="sky">
         DASH
+      </Badge>
+    );
+  if (kind === "yt")
+    return (
+      <Badge size="sm" color="rose">
+        YouTube
       </Badge>
     );
   return null;

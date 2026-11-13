@@ -7,6 +7,7 @@ import { Button } from "./arc/button/button";
 import { Dialog, DialogContent } from "./arc/dialog/dialog";
 import { Input } from "./arc/input/input";
 import { Select } from "./arc/select/select";
+import { YouTubeForm } from "./YouTubeDialog";
 
 /** 保存格式选项（视频/音频用前缀分组，Arc Select 不支持 optgroup）。 */
 const FORMAT_OPTIONS = [
@@ -78,6 +79,27 @@ function NewTaskForm({ onClose }: { onClose: () => void }) {
     } finally {
       setCreating(false);
     }
+  }
+
+  // YouTube 链接：画质/格式交给专用表单（解析与下载走 yt-dlp），
+  // 保留链接输入框便于换个链接重新解析。
+  if (preview?.kind === "youtube") {
+    return (
+      <div className="flex flex-col gap-3">
+        <Input
+          id="new-task-url"
+          label="下载链接"
+          autoFocus
+          placeholder="粘贴链接，回车解析"
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && url.trim()) void parse();
+          }}
+        />
+        <YouTubeForm url={preview.url || url.trim()} onClose={onClose} />
+      </div>
+    );
   }
 
   return (

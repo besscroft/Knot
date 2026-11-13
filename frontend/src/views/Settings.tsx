@@ -34,6 +34,9 @@ export function SettingsView() {
   const [ffmpegPath, setFfmpegPath] = useState<string | null>(null);
   const [checking, setChecking] = useState(true);
   const [downloadingFfmpeg, setDownloadingFfmpeg] = useState(false);
+  const [ytDlpPath, setYtDlpPath] = useState<string | null>(null);
+  const [checkingYtDlp, setCheckingYtDlp] = useState(true);
+  const [downloadingYtDlp, setDownloadingYtDlp] = useState(false);
   const [webURL, setWebURL] = useState("");
 
   useEffect(() => {
@@ -44,6 +47,10 @@ export function SettingsView() {
       .then((p) => setFfmpegPath(p || null))
       .catch(() => setFfmpegPath(null))
       .finally(() => setChecking(false));
+    App.checkYtDlp()
+      .then((p) => setYtDlpPath(p || null))
+      .catch(() => setYtDlpPath(null))
+      .finally(() => setCheckingYtDlp(false));
     App.webURL()
       .then(setWebURL)
       .catch(() => setWebURL(""));
@@ -68,6 +75,18 @@ export function SettingsView() {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setDownloadingFfmpeg(false);
+    }
+  }
+
+  async function fetchYtDlp() {
+    setDownloadingYtDlp(true);
+    try {
+      const p = await App.downloadYtDlp();
+      setYtDlpPath(p);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDownloadingYtDlp(false);
     }
   }
 
@@ -221,6 +240,36 @@ export function SettingsView() {
               : checking
                 ? "检测中…"
                 : "未安装。格式转换需要它，点击「获取 FFmpeg」自动下载并校验（约 80 MB，仅首次）"}
+          </p>
+        </div>
+
+        {/* yt-dlp（YouTube 下载） */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center gap-2">
+            <Input
+              label="yt-dlp 路径"
+              placeholder="手动指定 yt-dlp 路径（可选）"
+              value={data.ytDlpPath}
+              onChange={(e) => update({ ytDlpPath: e.target.value })}
+              className="min-w-0 flex-1"
+            />
+            <div className="mt-5">
+              <Button
+                variant="secondary"
+                onClick={() => void fetchYtDlp()}
+                loading={downloadingYtDlp}
+                disabled={downloadingYtDlp || !!ytDlpPath}
+              >
+                获取 yt-dlp
+              </Button>
+            </div>
+          </div>
+          <p className="text-xs leading-5 text-muted">
+            {ytDlpPath
+              ? `已就绪：${ytDlpPath}`
+              : checkingYtDlp
+                ? "检测中…"
+                : "未安装。YouTube 下载需要它，点击「获取 yt-dlp」自动下载并校验（约 30 MB，仅首次）"}
           </p>
         </div>
 

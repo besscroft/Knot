@@ -171,6 +171,7 @@ export function TaskDetail({ task, onClose }: { task: Task; onClose: () => void 
             <MetaRow label="大小" value={sizeText(task)} />
             <MetaRow label="并发" value={String(task.threads || "默认")} />
             <MetaRow label="保存格式" value={formatText(task)} />
+            {task.quality && <MetaRow label="画质" value={task.quality} />}
             <MetaRow label="创建于" value={new Date(task.createdAt).toLocaleString()} />
             {task.completedAt && (
               <MetaRow label="完成于" value={new Date(task.completedAt).toLocaleString()} />

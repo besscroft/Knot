@@ -80,7 +80,7 @@ export interface Preview {
   size: number;
   acceptRanges: boolean;
   contentType: string;
-  /** http | hls */
+  /** http | hls | youtube */
   kind: string;
   /** video | audio | other */
   mediaType: string;
@@ -101,6 +101,8 @@ export interface Settings {
   audioFormat: string;
   /** 手动指定 FFmpeg 路径，空 = 自动查找/下载 */
   ffmpegPath: string;
+  /** 手动指定 yt-dlp 路径（YouTube 下载），空 = 自动查找/下载 */
+  ytDlpPath: string;
   /** 浏览嗅探允许的资源类型，全量见 AllSniffTypes */
   sniffTypes: string[];
   /** Web 文件库：允许局域网设备访问（默认仅本机） */
@@ -177,8 +179,34 @@ export interface Task {
   audioUrl?: string;
   streamSize?: number;
   audioSize?: number;
+  /**
+   * yt-dlp 任务（kind=yt）：下载全权交给 yt-dlp 子进程，Quality 是画质
+   * 描述（展示用），Selector 是创建时锁定的 -f 格式选择表达式。
+   */
+  quality?: string;
+  selector?: string;
   createdAt: string;
   completedAt?: string;
+}
+
+/** YouTubeInfo 是 YouTube 视频的解析结果（App.ResolveYouTube 返回值）。 */
+export interface YouTubeInfo {
+  title: string;
+  /** 秒，0 = 未知 */
+  duration: number;
+  qualities: YouTubeQuality[];
+}
+
+/** YouTubeQuality 是一个可选画质档位；大小为视频+音轨的估算字节数。 */
+export interface YouTubeQuality {
+  /** 档位值（短边像素），0 = 最佳 */
+  id: number;
+  /** 如 "1080p60" */
+  desc: string;
+  /** 兼容性最好的编码 */
+  codecs?: string;
+  /** 估算字节数，0 = 未知 */
+  size: number;
 }
 
 // ---- Services ----
@@ -188,6 +216,14 @@ export const Tasks = {
   /** Create 探测 URL 并创建下载任务，返回带 ID 的任务。 */
   create(url: string, opt: CreateOptions): Promise<Task> {
     return call("Tasks.Create", url, opt);
+  },
+  /**
+   * CreateYouTube 把 YouTube 视频加入下载队列：qualityID 为解析返回的画质
+   * 档位；format 语义与 Tasks.Create 一致（音频格式 = 仅提取音轨）；
+   * name 为空时用视频标题。
+   */
+  createYouTube(url: string, qualityID: number, opt: CreateOptions): Promise<Task> {
+    return call("Tasks.CreateYouTube", url, qualityID, opt);
   },
   /** List 返回全部任务（按创建顺序）。 */
   list(): Promise<Task[]> {
@@ -231,12 +267,23 @@ export const App = {
   checkFfmpeg(): Promise<string> {
     return call("App.CheckFfmpeg");
   },
+  /** CheckYtDlp 仅检测本机 yt-dlp（不触发下载），返回路径或空串。 */
+  checkYtDlp(): Promise<string> {
+    return call("App.CheckYtDlp");
+  },
   /**
    * DownloadFfmpeg 手动触发 FFmpeg 获取（查找本机 → 自动下载并校验）。
    * 阻塞直到完成；成功返回 ffmpeg 路径。
    */
   downloadFfmpeg(): Promise<string> {
     return call("App.DownloadFfmpeg");
+  },
+  /**
+   * DownloadYtDlp 手动触发 yt-dlp 获取（查找本机 → 自动下载并校验）。
+   * 阻塞直到完成；成功返回 yt-dlp 路径。
+   */
+  downloadYtDlp(): Promise<string> {
+    return call("App.DownloadYtDlp");
   },
   /** GetSettings 返回当前设置。 */
   getSettings(): Promise<Settings> {
@@ -249,13 +296,20 @@ export const App = {
   mediaBase(): Promise<string> {
     return call("App.MediaBase");
   },
-  /** ParseURL 探测链接，返回可确认的预览信息。 */
+  /**
+   * ParseURL 探测链接，返回可确认的预览信息。YouTube 链接不做 HTTP 探测
+   * （页面 HTML 无意义），直接标记 kind=youtube，由前端转交画质解析。
+   */
   parseURL(url: string): Promise<Preview> {
     return call("App.ParseURL", url);
   },
   /** PickFolder 弹出系统目录选择框；取消时返回空字符串。 */
   pickFolder(): Promise<string> {
     return call("App.PickFolder");
+  },
+  /** ResolveYouTube 解析 YouTube 链接的标题与可选画质（新建下载弹窗用）。 */
+  resolveYouTube(url: string): Promise<YouTubeInfo> {
+    return call("App.ResolveYouTube", url);
   },
   /**
    * SaveSettings 保存设置，并同步队列并发数、下载代理、FFmpeg 配置与

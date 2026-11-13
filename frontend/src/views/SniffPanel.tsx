@@ -9,12 +9,14 @@ import { Dialog, DialogContent } from "../components/arc/dialog/dialog";
 import { Input } from "../components/arc/input/input";
 import { Select } from "../components/arc/select/select";
 import { IconButton } from "../components/ui";
+import { YouTubeDialog } from "../components/YouTubeDialog";
 import { formatBytes } from "../lib/format";
 import { cn } from "../lib/utils";
 
 const TYPE_LABEL: Record<string, string> = {
   info: "提示",
   bili: "B站视频",
+  youtube: "YouTube",
   hls: "HLS",
   video: "视频",
   audio: "音频",
@@ -25,9 +27,10 @@ const TYPE_LABEL: Record<string, string> = {
   other: "其他",
 };
 
-/** 资源类型 → Arc Badge 的色调（沿用原配色意图：B站粉/视频紫/音频青/压缩包橙…）。 */
+/** 资源类型 → Arc Badge 的色调（沿用原配色意图：B站粉/YouTube红/视频紫/音频青/压缩包橙…）。 */
 const TYPE_TONE: Record<string, { tone?: "neutral" | "success" | "info" | "danger"; color?: "teal" | "sky" | "orchid" | "violet" | "rose" | "amber" }> = {
   bili: { color: "rose" },
+  youtube: { tone: "danger" },
   hls: { tone: "danger" },
   video: { color: "violet" },
   audio: { color: "teal" },
@@ -51,6 +54,7 @@ export function SniffPanel() {
   const [scanning, setScanning] = useState(false);
   const [queued, setQueued] = useState(false);
   const [biliOpen, setBiliOpen] = useState(false);
+  const [ytOpen, setYtOpen] = useState(false);
   const scanTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => {
@@ -92,14 +96,14 @@ export function SniffPanel() {
 
   function downloadSelected() {
     for (const s of sniffed) {
-      if (s.type === "bili") continue; // B 站条目走专用画质弹窗
+      if (s.type === "bili" || s.type === "youtube") continue; // 站点专用条目走专用画质弹窗
       if (selected.has(s.url)) enqueue({ url: s.url, name: s.name, referer: s.page });
     }
     setSelected(new Set());
   }
 
-  /** B 站条目下载完成后的入队反馈。 */
-  function biliQueued() {
+  /** 站点专用条目入队后的反馈。 */
+  function siteQueued() {
     setQueued(true);
     window.setTimeout(() => setQueued(false), 3000);
   }
@@ -125,7 +129,8 @@ export function SniffPanel() {
   }
 
   const biliEntry = sniffed.find((s) => s.type === "bili");
-  const items = sniffed.filter((s) => s.type !== "bili");
+  const ytEntry = sniffed.find((s) => s.type === "youtube");
+  const items = sniffed.filter((s) => s.type !== "bili" && s.type !== "youtube");
   const current = requests[0];
 
   return (
@@ -149,25 +154,14 @@ export function SniffPanel() {
         </div>
       </div>
 
-      {/* B 站视频页专用条目：DASH 分轨嗅探不到整段地址，走画质选择弹窗 */}
-      {biliEntry && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface-muted/40 px-2.5 py-2">
-          <Badge size="sm" {...TYPE_TONE.bili}>
-            {TYPE_LABEL.bili}
-          </Badge>
-          <span className="min-w-0 flex-1 truncate text-xs font-medium" title={biliEntry.name}>
-            {biliEntry.name}
-          </span>
-          <Button size="sm" className="shrink-0" onClick={() => setBiliOpen(true)}>
-            <Download className="size-3.5" />
-            下载
-          </Button>
-        </div>
-      )}
+      {/* 视频页专用条目（B 站 DASH / YouTube）：常规嗅探拿不到可用资源，
+          置顶卡片打开专用画质弹窗 */}
+      {biliEntry && <SiteEntryRow entry={biliEntry} onOpen={() => setBiliOpen(true)} />}
+      {ytEntry && <SiteEntryRow entry={ytEntry} onOpen={() => setYtOpen(true)} />}
 
       {/* 嗅探列表 */}
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {items.length === 0 && !biliEntry ? (
+        {items.length === 0 && !biliEntry && !ytEntry ? (
           <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-muted">
             <Search className="size-7 opacity-40" />
             <div className="text-xs">暂未嗅探到资源</div>
@@ -246,8 +240,31 @@ export function SniffPanel() {
 
       {/* B 站画质选择弹窗 */}
       {biliOpen && biliEntry && (
-        <BilibiliDialog entry={biliEntry} onQueued={biliQueued} onClose={() => setBiliOpen(false)} />
+        <BilibiliDialog entry={biliEntry} onQueued={siteQueued} onClose={() => setBiliOpen(false)} />
       )}
+
+      {/* YouTube 画质选择弹窗 */}
+      {ytOpen && ytEntry && (
+        <YouTubeDialog entry={ytEntry} onQueued={siteQueued} onClose={() => setYtOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+/** 视频页专用条目行：徽章 + 标题 + 下载按钮（点击打开专用画质弹窗）。 */
+function SiteEntryRow({ entry, onOpen }: { entry: Sniffed; onOpen: () => void }) {
+  return (
+    <div className="flex shrink-0 items-center gap-2 border-b border-border bg-surface-muted/40 px-2.5 py-2">
+      <Badge size="sm" {...(TYPE_TONE[entry.type] ?? {})}>
+        {TYPE_LABEL[entry.type] ?? entry.type}
+      </Badge>
+      <span className="min-w-0 flex-1 truncate text-xs font-medium" title={entry.name}>
+        {entry.name}
+      </span>
+      <Button size="sm" className="shrink-0" onClick={onOpen}>
+        <Download className="size-3.5" />
+        下载
+      </Button>
     </div>
   );
 }

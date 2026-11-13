@@ -6,6 +6,7 @@
 
 - HTTP/HTTPS 直链下载：多线程分片（默认 8 段）、断点续传、失败自动重试
 - **HLS (m3u8) 下载**：master 自动选最高清晰度、分片并发下载、AES-128 解密、断点续传，完成后自动合并为 MP4（gomedia 纯 Go 转封装，失败时保留 .ts）
+- **YouTube 视频下载**：基于 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 实现，粘贴链接或应用内浏览到视频页即可选画质下载（含高帧率标注、仅提取音频）；解析/下载/合流全由 yt-dlp 完成，断点续传走 .part；yt-dlp 缺失时自动下载对应平台构建并校验（仅首次），也可在设置中手动指定路径
 - **格式选择与转换**（参考 Downbit）：下载时「保存为」可选 MP4/MKV/MOV/WebM 或提取音频为 M4A/MP3/Opus/FLAC/WAV；容器转换与音频提取均为 FFmpeg 流拷贝，速度极快；FFmpeg 缺失时自动下载对应平台构建并校验（仅首次），也可在设置中手动指定路径；设置里可配置视频/音频默认格式
 - 下载队列：并发上限可配、暂停/继续/删除、任务栏进度
 - **应用内浏览 + 资源嗅探**：浏览时侧栏保留，站点由无边框子窗口呈现在内容区，右上角浮出嗅探面板（自动收集 fetch/XHR 与 DOM 资源，勾选下载）；下载自动携带站点的 Referer/Cookie/UA 规避防盗链；网页触发的下载自动转入下载器；侧栏「浏览中」状态条或嗅探面板均可退出浏览
@@ -18,6 +19,7 @@
 
 - 资源嗅探只覆盖顶层 frame（iframe 内资源暂不采集）
 - HLS 暂不支持：直播流（无 EXT-X-ENDLIST）、fMP4 分片（EXT-X-MAP）、BYTERANGE、SAMPLE-AES
+- YouTube 暂不支持：直播流、播放列表批量下载、需登录的受限视频（Cookies）
 - 浏览中的 target=_blank 弹页交给系统默认浏览器打开
 
 ## 规划
@@ -58,6 +60,7 @@ internal/
   engine/             下载引擎：任务模型、队列管理、持久化
   engine/httpdl/      HTTP 分片下载器（探测/续传/重试/代理）
   engine/hls/         HLS 下载器（播放列表/分片/AES/拼接/转封装 MP4）
+  engine/ytdlp/       yt-dlp 封装（二进制管理/-J 解析/画质归并/下载执行）
   service/            mygo 绑定服务（Tasks/App/Browser）与设置
 frontend/             React + Tailwind（Vite+ 工具链）
   src/mygo.ts         自动生成的类型化 IPC 客户端，勿手改
