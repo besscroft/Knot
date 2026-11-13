@@ -15,6 +15,10 @@ import (
 // shared 是全部 HTTP 探测与下载共用的客户端；SetProxy 时整体换新。
 var shared atomic.Pointer[http.Client]
 
+// proxyRaw 记录最近一次显式设置的代理（空 = 跟随系统/环境），供外部
+// 工具（yt-dlp 等子进程）对齐下载器的网络出口。
+var proxyRaw atomic.Pointer[string]
+
 func init() {
 	shared.Store(newClient(nil))
 }
@@ -60,6 +64,7 @@ func SetProxy(raw string) error {
 
 	old := Client()
 	shared.Store(newClient(proxyFn))
+	proxyRaw.Store(&raw)
 	if old != nil && old.Transport != nil {
 		type idleCloser interface{ CloseIdleConnections() }
 		if c, ok := old.Transport.(idleCloser); ok {
@@ -68,6 +73,20 @@ func SetProxy(raw string) error {
 		old.CloseIdleConnections()
 	}
 	return nil
+}
+
+// ProxyTarget 返回外部工具（yt-dlp 等子进程）应对齐的代理地址：显式设置
+// 时原样返回；否则经 netproxy 解析系统/环境代理（与共享客户端同源），
+// 解析不到返回空串（yt-dlp 自行跟随环境变量）。
+func ProxyTarget() string {
+	if p := proxyRaw.Load(); p != nil && *p != "" {
+		return *p
+	}
+	req := &http.Request{URL: &url.URL{Scheme: "https", Host: "www.youtube.com"}}
+	if u, err := netproxy.Proxy(req); err == nil && u != nil {
+		return u.String()
+	}
+	return ""
 }
 
 // Probe 用共享客户端探测目标（见 probe.go）。

@@ -44,6 +44,10 @@ type Task struct {
 	AudioURL    string     `json:"audioUrl,omitempty"`
 	StreamSize  int64      `json:"streamSize,omitempty"`
 	AudioSize   int64      `json:"audioSize,omitempty"`
+	// yt-dlp 任务（kind=yt）：下载全权交给 yt-dlp 子进程，Quality 是画质
+	// 描述（展示用），Selector 是创建时锁定的 -f 格式选择表达式。
+	Quality  string `json:"quality,omitempty"`
+	Selector string `json:"selector,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
 	CompletedAt *time.Time `json:"completedAt,omitempty"`
 }

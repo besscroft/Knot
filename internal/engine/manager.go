@@ -193,6 +193,9 @@ func (m *Manager) Remove(id string) error {
 	if e.task.Kind == "dash" {
 		_ = os.RemoveAll(dashWorkDir(e.task))
 	}
+	if e.task.Kind == "yt" {
+		cleanYtTemp(e.task) // yt-dlp 的 .part/.ytdl/分轨中间文件
+	}
 	m.persist()
 	return nil
 }
@@ -322,6 +325,8 @@ func (m *Manager) runTask(ctx context.Context, e *entry) {
 		})
 	case "dash":
 		err = m.runDash(ctx, e, t)
+	case "yt":
+		err = m.runYt(ctx, e, t)
 	default:
 		err = httpdl.Download(ctx, t.URL, t.Path(), httpdl.Options{
 			Threads: t.Threads,
