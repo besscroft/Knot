@@ -664,6 +664,15 @@ func emitSniffed() {
 		if p, page, err := biliFetch(); err == nil && p.hasStreams() {
 			list = append([]Sniffed{{URL: page, Name: biliDefaultName(p), Type: "bili", Page: page}}, list...)
 		}
+	} else if isYouTubeVideoPage(pageURL) {
+		// YouTube 视频页：解析与下载走 yt-dlp，无需页面上下文，条目只是
+		// 把链接送进专用弹窗（标题取页面标题，去掉站点后缀）。
+		const titleCode = `document.title.replace(/\s*-\s*YouTube\s*$/, '')`
+		if title, err := mygo.EvalAs[string](site.Page(), titleCode); err == nil {
+			if title = strings.TrimSpace(title); title != "" {
+				list = append([]Sniffed{{URL: pageURL, Name: title, Type: "youtube", Page: pageURL}}, list...)
+			}
+		}
 	}
 	list = filterSniffed(list)
 	_ = SniffedEvt.Broadcast(list)
@@ -690,6 +699,11 @@ func filterSniffed(list []Sniffed) []Sniffed {
 			}
 		case s.Type == "bili":
 			// B 站专用条目是视频资源：video 或 hls 任一允许即展示。
+			if allowed["video"] || allowed["hls"] {
+				out = append(out, s)
+			}
+		case s.Type == "youtube":
+			// YouTube 专用条目同 B 站：视频资源白名单放行。
 			if allowed["video"] || allowed["hls"] {
 				out = append(out, s)
 			}

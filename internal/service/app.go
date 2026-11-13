@@ -9,6 +9,7 @@ import (
 	"github.com/besscroft/knot/internal/engine"
 	"github.com/besscroft/knot/internal/engine/hls"
 	"github.com/besscroft/knot/internal/engine/httpdl"
+	"github.com/besscroft/knot/internal/engine/ytdlp"
 	"github.com/egoist/mygo"
 )
 
@@ -23,15 +24,19 @@ type Preview struct {
 	Size         int64  `json:"size"` // -1 表示未知
 	AcceptRanges bool   `json:"acceptRanges"`
 	ContentType  string `json:"contentType"`
-	Kind         string `json:"kind"`      // http | hls
+	Kind         string `json:"kind"`      // http | hls | youtube
 	MediaType    string `json:"mediaType"` // video | audio | other
 }
 
-// ParseURL 探测链接，返回可确认的预览信息。
+// ParseURL 探测链接，返回可确认的预览信息。YouTube 链接不做 HTTP 探测
+// （页面 HTML 无意义），直接标记 kind=youtube，由前端转交画质解析。
 func (a *AppService) ParseURL(ctx context.Context, url string) (Preview, error) {
 	url = strings.TrimSpace(url)
 	if url == "" {
 		return Preview{}, fmt.Errorf("URL 不能为空")
+	}
+	if isYouTubeSite(url) {
+		return Preview{URL: url, Kind: "youtube", Size: -1, MediaType: "video"}, nil
 	}
 	probe, err := httpdl.Probe(ctx, url)
 	if err != nil {
@@ -50,6 +55,17 @@ func (a *AppService) ParseURL(ctx context.Context, url string) (Preview, error) 
 		Kind:         kind,
 		MediaType:    classifyMedia(probe.ContentType, probe.URL, kind),
 	}, nil
+}
+
+// DownloadYtDlp 手动触发 yt-dlp 获取（查找本机 → 自动下载并校验）。
+// 阻塞直到完成；成功返回 yt-dlp 路径。
+func (a *AppService) DownloadYtDlp(ctx context.Context) (string, error) {
+	return ytdlp.Ensure(ctx, true)
+}
+
+// CheckYtDlp 仅检测本机 yt-dlp（不触发下载），返回路径或空串。
+func (a *AppService) CheckYtDlp(ctx context.Context) (string, error) {
+	return ytdlp.Find(ctx), nil
 }
 
 // DownloadFfmpeg 手动触发 FFmpeg 获取（查找本机 → 自动下载并校验）。
@@ -88,6 +104,7 @@ func (a *AppService) SaveSettings(v Settings) error {
 	mgr.SetMaxRun(v.MaxConcurrent)
 	cacheDir, _ := mygo.App.Path(mygo.PathCache)
 	engine.SetFfmpegOptions(v.FfmpegPath, filepath.Join(cacheDir, "ffmpeg"))
+	ytdlp.SetOptions(v.YtDlpPath, filepath.Join(cacheDir, "ytdlp"))
 	UpdateSniffConfig() // 嗅探类型白名单即时推送给站点页面
 	if old.WebAccess != v.WebAccess || old.WebPort != v.WebPort {
 		RestartMediaServer() // 监听方式/端口变了：重启媒体服务器（含 Web 文件库）

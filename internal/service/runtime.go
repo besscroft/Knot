@@ -9,6 +9,7 @@ import (
 
 	"github.com/besscroft/knot/internal/engine"
 	"github.com/besscroft/knot/internal/engine/httpdl"
+	"github.com/besscroft/knot/internal/engine/ytdlp"
 	"github.com/egoist/mygo"
 )
 
@@ -71,6 +72,8 @@ func Init() error {
 
 	// FFmpeg：设置指定路径 + 自动下载缓存目录。
 	engine.SetFfmpegOptions(settings.Get().FfmpegPath, filepath.Join(cacheDir, "ffmpeg"))
+	// yt-dlp（YouTube 下载）：设置指定路径 + 自动下载缓存目录。
+	ytdlp.SetOptions(settings.Get().YtDlpPath, filepath.Join(cacheDir, "ytdlp"))
 
 	StartMediaServer() // loopback 媒体服务：文件与封面（大文件必须真流式，见 media.go）
 

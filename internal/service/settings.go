@@ -20,6 +20,7 @@ type Settings struct {
 	VideoFormat   string   `json:"videoFormat"`   // 视频默认格式：mp4/mkv/mov/webm，空 = mp4
 	AudioFormat   string   `json:"audioFormat"`   // 音频默认格式：m4a/mp3/opus/flac/wav，空 = m4a
 	FfmpegPath    string   `json:"ffmpegPath"`    // 手动指定 FFmpeg 路径，空 = 自动查找/下载
+	YtDlpPath     string   `json:"ytDlpPath"`     // 手动指定 yt-dlp 路径（YouTube 下载），空 = 自动查找/下载
 	SniffTypes    []string `json:"sniffTypes"`    // 浏览嗅探允许的资源类型，全量见 AllSniffTypes
 	WebAccess     bool     `json:"webAccess"`     // Web 文件库：允许局域网设备访问（默认仅本机）
 	WebPort       int      `json:"webPort"`       // Web 文件库监听端口
@@ -107,6 +108,8 @@ func sanitizeSettings(v *Settings, defDir string) {
 	}
 	v.VideoFormat = strings.ToLower(v.VideoFormat)
 	v.AudioFormat = strings.ToLower(v.AudioFormat)
+	v.FfmpegPath = strings.TrimSpace(v.FfmpegPath)
+	v.YtDlpPath = strings.TrimSpace(v.YtDlpPath)
 
 	// Web 文件库：端口越界回默认（token 已移除，访问控制靠绑定地址 +
 	// Host 白名单，见 media.go）。
