@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/besscroft/knot/internal/engine/httpdl"
+	"github.com/besscroft/knot/internal/proc"
 )
 
 var (
@@ -53,7 +54,7 @@ func works(ctx context.Context, given string) bool {
 	}
 	c, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(c, given, "-version").Output()
+	out, err := proc.CommandContext(c, given, "-version").Output()
 	if err != nil {
 		return false
 	}
@@ -113,7 +114,7 @@ func FindFfprobe(ctx context.Context) string {
 	}
 	for _, p := range candidates {
 		c, cancel := context.WithTimeout(ctx, 10*time.Second)
-		out, err := exec.CommandContext(c, p, "-version").Output()
+		out, err := proc.CommandContext(c, p, "-version").Output()
 		cancel()
 		if err == nil && strings.Contains(string(out), "ffprobe") {
 			return p
@@ -130,7 +131,7 @@ func ProbeDuration(ctx context.Context, path string) float64 {
 	}
 	c, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(c, ffp,
+	out, err := proc.CommandContext(c, ffp,
 		"-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path,
 	).Output()
 	if err != nil {

@@ -35,9 +35,15 @@ func main() {
 			return
 		}
 		service.SetMainWindow(createMainWindow())
+		// 托盘常驻：失败只记录，应用主体不受影响。
+		if err := service.InitTray(showMainWindow); err != nil {
+			log.Println("创建托盘失败:", err)
+		}
 	})
 
 	// Windows/Linux：最后一个窗口关闭即退出；macOS：保持运行，激活时重建窗口。
+	// 开启「关闭时最小化到托盘」时窗口只是隐藏不会真正关闭，此回调不触发，
+	// 应用常驻托盘；设置关闭后恢复原行为。
 	mygo.App.OnWindowAllClosed(func() {
 		if runtime.GOOS != "darwin" {
 			mygo.App.Quit()
@@ -45,17 +51,15 @@ func main() {
 	})
 	mygo.App.OnActivate(func(hasVisibleWindows bool) {
 		if !hasVisibleWindows {
-			service.SetMainWindow(createMainWindow())
+			showMainWindow()
 		}
 	})
 	mygo.App.OnSecondInstance(func(_ []string, _ string) {
-		if w := service.MainWindow(); w != nil {
-			w.Restore()
-			w.Focus()
-		}
+		showMainWindow()
 	})
 	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) {
-		service.Shutdown() // 停任务、落盘断点状态
+		service.BeginQuit() // 窗口 OnClose 放行，避免退出被「隐藏到托盘」拦截
+		service.Shutdown()  // 停任务、落盘断点状态
 	})
 
 	if err := mygo.App.Run(); err != nil {
@@ -77,4 +81,16 @@ func createMainWindow() *mygo.Window {
 		// dev 时加载 devUrl（Vite+ 开发服务器），打包后加载内嵌的 frontendDist。
 		URL: "/",
 	})
+}
+
+// showMainWindow 唤起主窗口：托盘菜单、二次启动与 macOS 激活共用。
+// 窗口还活着（含被隐藏/最小化）就恢复聚焦；已销毁（macOS 关窗后）才重建。
+func showMainWindow() {
+	if w := service.MainWindow(); w != nil && !w.IsDestroyed() {
+		w.Show()
+		w.Restore()
+		w.Focus()
+		return
+	}
+	service.SetMainWindow(createMainWindow())
 }

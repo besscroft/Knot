@@ -222,3 +222,9 @@ func fileExistsDarwin(path string) bool {
 	st, err := os.Stat(path)
 	return err == nil && !st.IsDir()
 }
+
+// extPreInstall macOS 走外部扩展 JSON 通道；「已移除」标记（profile 的
+// extensions.external_uninstalls）对 JSON 通道同样生效，暂待需要时再清理。
+func extPreInstall(browserID string) error {
+	return nil
+}

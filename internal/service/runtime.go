@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 
 	"github.com/besscroft/knot/internal/engine"
 	"github.com/besscroft/knot/internal/engine/httpdl"
@@ -23,6 +24,10 @@ var (
 
 	mainMu  sync.Mutex
 	mainWin *mygo.Window
+
+	// quitting 标记退出流程已开始（OnBeforeQuit 里置位）：窗口 OnClose
+	// 据此放行关闭，否则关闭按钮按「最小化到托盘」处理。
+	quitting atomic.Bool
 
 	// taskbar 进度聚合所需的运行中任务集合。
 	taskbarMu sync.Mutex
@@ -49,7 +54,7 @@ func Init() error {
 	cacheDir, _ := mygo.App.Path(mygo.PathCache)
 	migrateLegacyData(userData, cacheDir) // 旧开发目录的数据一次性并入（不覆盖已有）
 
-	def := Settings{DownloadDir: defaultDownloadDir(), Threads: 8, MaxConcurrent: 3, SniffTypes: AllSniffTypes}
+	def := Settings{DownloadDir: defaultDownloadDir(), Threads: 8, MaxConcurrent: 3, SniffTypes: AllSniffTypes, CloseToTray: true}
 	settings, err = loadSettings(filepath.Join(userData, "settings.json"), def)
 	if err != nil {
 		return err
@@ -95,6 +100,12 @@ func Init() error {
 	return nil
 }
 
+// BeginQuit 标记应用正在退出：窗口关闭不再被拦截为隐藏到托盘。
+// 须在 OnBeforeQuit 里调用（mygo 先跑 OnBeforeQuit 再逐个关窗口）。
+func BeginQuit() {
+	quitting.Store(true)
+}
+
 // Shutdown 在退出前停掉所有任务，保证断点状态落盘。
 func Shutdown() {
 	if mgr != nil {
@@ -134,6 +145,16 @@ func SetMainWindow(w *mygo.Window) {
 	// 应用自身页面不允许触发下载（站点窗口有自己的拦截逻辑）。
 	w.Page().OnWillDownload(func(e *mygo.DownloadEvent) {
 		e.PreventDefault()
+	})
+	// 关闭按钮：默认拦截为隐藏到托盘，下载在后台继续；正在退出或设置
+	// 关闭时放行。退出标记见 BeginQuit（mygo 退出前会先跑 OnBeforeQuit）。
+	w.OnClose(func(e *mygo.CloseEvent) {
+		if quitting.Load() || settings == nil || !settings.Get().CloseToTray {
+			return
+		}
+		e.PreventDefault()
+		w.Hide()
+		notifyHideHint()
 	})
 }
 

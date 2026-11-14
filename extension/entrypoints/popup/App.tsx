@@ -57,6 +57,23 @@ export default function App() {
     })();
   }, []);
 
+  // 标签页数据（嗅探结果/B 站播放信息）落盘后实时刷新：内容脚本是异步
+  // 上报的，popup 打开时可能还没到，只取一次会一直停在等待态。
+  useEffect(() => {
+    if (!tabId) return;
+    const key = `tab:${tabId}`;
+    const onChanged = (
+      changes: Record<string, { newValue?: unknown; oldValue?: unknown }>,
+      area: string,
+    ): void => {
+      if (area !== 'session' || !changes[key]) return;
+      const next = changes[key].newValue as TabData | undefined;
+      if (next) setData(next);
+    };
+    browser.storage.onChanged.addListener(onChanged);
+    return () => browser.storage.onChanged.removeListener(onChanged);
+  }, [tabId]);
+
   const visible = useMemo(() => (data?.sniffs ?? []).filter(FILTER_MATCH[filter]), [data, filter]);
   const picked = useMemo(() => data?.sniffs.filter((s) => selected.has(s.url)) ?? [], [data, selected]);
 

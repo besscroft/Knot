@@ -7,10 +7,11 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/besscroft/knot/internal/proc"
 )
 
 // progressMark 是进度模板的前缀标记：--progress-template 的 download 模板
@@ -74,7 +75,7 @@ func Download(ctx context.Context, bin string, o DownloadOptions) error {
 	}
 
 	var stderr tailBuffer
-	cmd := exec.CommandContext(ctx, bin, DownloadArgs(o)...)
+	cmd := proc.CommandContext(ctx, bin, DownloadArgs(o)...)
 	cmd.Stdout = &lineWriter{onLine: onLine}
 	cmd.Stderr = io.MultiWriter(&stderr, &lineWriter{onLine: onLine})
 	if err := cmd.Run(); err != nil {

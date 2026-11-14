@@ -7,12 +7,12 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/besscroft/knot/internal/engine/httpdl"
+	"github.com/besscroft/knot/internal/proc"
 )
 
 // dashWorkDir 返回 DASH 任务的工作目录（分轨缓存）。
@@ -148,7 +148,7 @@ func dashMux(ctx context.Context, ffmpeg, video, audio, dst string) error {
 		"-c", "copy", "-movflags", "+faststart",
 		"-f", "mp4", dst,
 	}
-	out, err := exec.CommandContext(c, ffmpeg, args...).CombinedOutput()
+	out, err := proc.CommandContext(c, ffmpeg, args...).CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err() // 暂停/取消：保持错误链供 manager 判定

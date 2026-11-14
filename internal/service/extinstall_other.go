@@ -56,3 +56,8 @@ func extAuthorizeBrowser(browserID string) error {
 func extOpenExtensionsPage(browserID string) error {
 	return fmt.Errorf("该平台暂不支持自动安装，请手动加载解压目录")
 }
+
+// extPreInstall 该平台无注册表安装通道，无「已移除」标记可清。
+func extPreInstall(browserID string) error {
+	return nil
+}

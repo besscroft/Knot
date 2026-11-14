@@ -135,7 +135,9 @@ export function SettingsView() {
       setExtHint(
         op === "uninstall"
           ? "已移除，重启浏览器后扩展消失"
-          : "已生效，浏览器运行中通常几秒内出现（或重启浏览器）；浏览器可能显示「由您的组织管理」标记",
+          : op === "install"
+            ? "已写入安装信息与信任策略，浏览器运行中通常几秒内出现（或重启浏览器）。首次安装需在浏览器扩展管理页把 Knot 开关打开一次（Chrome 的外部扩展确认机制），之后的版本更新会自动生效"
+            : "信任策略已放行；若扩展此前被禁用，重启浏览器或在扩展页打开开关即可",
       );
     } catch (err) {
       setExtError(err instanceof Error ? err.message : String(err));
@@ -347,9 +349,10 @@ export function SettingsView() {
           <div className="text-sm font-medium">浏览器插件</div>
           <p className="text-xs leading-5 text-muted">
             一键把 Knot 插件安装到本机浏览器，日常浏览时即可嗅探资源、右键或弹窗一键回传下载。
-            浏览器运行中通常几秒内自动出现，否则重启浏览器后生效。
-            Chrome/Edge 会把非商店来源的扩展标记为「可能已损坏」并禁用，需「管理员授权」写入本机信任策略放行
-            （浏览器随后可能显示「由您的组织管理」标记）。
+            安装会同步写入本机信任策略（非商店扩展不被 Chrome 禁用的唯一自动放行通道），
+            部分机器策略键受限时需一次管理员确认。浏览器运行中通常几秒内自动出现，否则重启浏览器后生效；
+            首次安装需在浏览器扩展管理页把开关打开一次，之后的版本更新自动生效。
+            浏览器可能显示「由您的组织管理」标记。
           </p>
           {ext && (
             <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
@@ -455,6 +458,19 @@ export function SettingsView() {
               />
             ))}
           </div>
+        </div>
+
+        {/* 应用 */}
+        <div className="flex flex-col gap-2">
+          <div className="text-sm font-medium">应用</div>
+          <Switch
+            label="关闭窗口时最小化到托盘"
+            checked={data.closeToTray}
+            onCheckedChange={(v) => update({ closeToTray: v })}
+          />
+          <p className="text-xs leading-5 text-muted">
+            点击关闭按钮时隐藏到系统托盘，下载在后台继续；退出请用托盘菜单。
+          </p>
         </div>
 
         {error && (

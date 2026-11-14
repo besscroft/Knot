@@ -196,15 +196,18 @@ export function TaskGrid({
   tasks,
   onPlay,
   onRemove,
+  blurred,
 }: {
   tasks: Task[];
   onPlay: (t: Task) => void;
   onRemove: (t: Task) => void;
+  /** 预览模糊（隐私模式）：封面图打码，时长与操作不受影响。 */
+  blurred?: boolean;
 }) {
   return (
     <div className="grid grid-cols-4 gap-3">
       {tasks.map((t) => (
-        <TaskCard key={t.id} task={t} onPlay={onPlay} onRemove={onRemove} />
+        <TaskCard key={t.id} task={t} onPlay={onPlay} onRemove={onRemove} blurred={blurred} />
       ))}
     </div>
   );
@@ -215,10 +218,13 @@ export function TaskCard({
   task,
   onPlay,
   onRemove,
+  blurred,
 }: {
   task: Task;
   onPlay: (t: Task) => void;
   onRemove: (t: Task) => void;
+  /** 预览模糊（隐私模式）：封面图打码，时长与操作不受影响。 */
+  blurred?: boolean;
 }) {
   const kind = mediaKindOf(task.name);
   const playable = kind === "video" || kind === "audio";
@@ -254,7 +260,10 @@ export function TaskCard({
                 src={kind === "image" ? mediaFileUrl(task.id) : mediaThumbUrl(task.id)}
                 loading="lazy"
                 alt={task.name}
-                className="absolute inset-0 h-full w-full object-cover"
+                className={cn(
+                  "absolute inset-0 h-full w-full object-cover transition-[filter] duration-300",
+                  blurred && "blur-md",
+                )}
                 onError={(e) => {
                   e.currentTarget.style.display = "none";
                 }}

@@ -8,10 +8,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/besscroft/knot/internal/proc"
 )
 
 // Info 是 yt-dlp -J 的解析结果（服务层映射为前端的画质列表）。
@@ -74,7 +75,7 @@ func Resolve(ctx context.Context, bin, rawURL, proxy string) (*Info, error) {
 	args = append(args, rawURL)
 
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := proc.CommandContext(ctx, bin, args...)
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {

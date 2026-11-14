@@ -75,8 +75,15 @@ func (e *ExtInstaller) Status() (ExtStatus, error) {
 	}, nil
 }
 
-// Install 把插件安装到指定浏览器：落盘 crx/解压目录并写入安装信息。
-// 浏览器运行中通常几秒内热加载，否则下次启动生效。
+// Install 把插件安装到指定浏览器：清理「已移除」标记、落盘 crx/解压目录、
+// 写入注册表安装信息，并同步写入信任策略（ExtensionInstallAllowlist）。
+// 信任策略必须与注册表同步完成：branded Chrome 的 InstallVerifier 会把
+// 非商店外部扩展判为「未在商店列出」（DISABLE_NOT_VERIFIED）并拒绝用户
+// 手动启用，Allowlist 是唯一自动放行通道（见 extinstall_windows.go）。
+// 策略键受限时自动走 UAC。浏览器运行中通常几秒内热加载，否则下次启动
+// 生效；首次安装后用户需在扩展页点一次「启用」（浏览器的
+// DISABLE_EXTERNAL_EXTENSION 确认门，无法程序化绕过），之后的版本更新
+// 自动生效。
 func (e *ExtInstaller) Install(browserID string) error {
 	if settings == nil {
 		return ErrNotReady
@@ -88,10 +95,19 @@ func (e *ExtInstaller) Install(browserID string) error {
 	if b.Manual {
 		return fmt.Errorf("%s 不支持自动安装，请手动加载解压目录", b.Name)
 	}
+	if err := extPreInstall(browserID); err != nil {
+		return err
+	}
 	if _, _, _, err := extWriteFiles(); err != nil {
 		return err
 	}
-	return extInstallBrowser(browserID)
+	if err := extInstallBrowser(browserID); err != nil {
+		return err
+	}
+	if err := extAuthorizeBrowser(browserID); err != nil {
+		return fmt.Errorf("插件已注册，但信任策略写入失败，浏览器可能拒绝启用（可稍后执行「管理员授权」重试）: %w", err)
+	}
+	return nil
 }
 
 // Uninstall 移除指定浏览器的插件注册（浏览器重启后扩展消失）。

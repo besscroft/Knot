@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -19,6 +18,7 @@ import (
 	"time"
 
 	"github.com/besscroft/knot/internal/engine"
+	"github.com/besscroft/knot/internal/proc"
 	"github.com/egoist/mygo"
 )
 
@@ -365,7 +365,7 @@ func extractThumb(task engine.Task, dst string) error {
 	}
 	c, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(c, ffmpeg,
+	cmd := proc.CommandContext(c, ffmpeg,
 		"-y", "-v", "error", "-ss", at, "-i", task.Path(),
 		"-frames:v", "1", "-vf", "scale=480:-2", "-q:v", "3", dst,
 	)

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Check, Download, Globe, Plus, X } from "lucide-react";
+import { Check, Download, Eye, EyeOff, Globe, Plus, X } from "lucide-react";
 import { useTasks } from "./store/tasks";
 import { TaskList, TaskGrid } from "./components/TaskItem";
 import { MediaViewer } from "./components/MediaViewer";
@@ -13,6 +13,7 @@ import { Badge } from "./components/arc/badge/badge";
 import { Button } from "./components/arc/button/button";
 import { EmptyState } from "./components/arc/empty-state/empty-state";
 import SegmentedControl from "./components/arc/segmented-control/segmented-control";
+import { Tooltip } from "./components/arc/tooltip/tooltip";
 import { IconButton } from "./components/ui";
 import { formatSpeed } from "./lib/format";
 import { cn } from "./lib/utils";
@@ -38,6 +39,8 @@ export default function App() {
   const [doneView, setDoneView] = useState<"cards" | "list">(() =>
     localStorage.getItem("knot.doneView") === "list" ? "list" : "cards",
   );
+  // 预览模糊（隐私模式）：默认开启，手动取消后记住选择（存 localStorage）。
+  const [blurPreview, setBlurPreview] = useState(() => localStorage.getItem("knot.blurPreview") !== "0");
   // 正在应用内查看/播放的已完成任务。
   const [playing, setPlaying] = useState<Task | null>(null);
   // 任务详情弹窗：存任务 ID，渲染时从 store 取最新对象（广播自动跟随）。
@@ -48,6 +51,12 @@ export default function App() {
   function switchDoneView(v: "cards" | "list") {
     setDoneView(v);
     localStorage.setItem("knot.doneView", v);
+  }
+  function toggleBlurPreview() {
+    setBlurPreview((v) => {
+      localStorage.setItem("knot.blurPreview", v ? "0" : "1");
+      return !v;
+    });
   }
   const init = useTasks((s) => s.init);
   const tasks = useTasks((s) => s.byId);
@@ -180,15 +189,25 @@ export default function App() {
               </h1>
               <div className="flex items-center gap-2">
                 {view === "done" && (
-                  <SegmentedControl
-                    label="展示方式"
-                    options={[
-                      { value: "cards", label: "卡片" },
-                      { value: "list", label: "列表" },
-                    ]}
-                    value={doneView}
-                    onValueChange={(v) => switchDoneView(v as "cards" | "list")}
-                  />
+                  <>
+                    <Tooltip content={blurPreview ? "取消模糊预览" : "模糊预览"}>
+                      <IconButton
+                        aria-label={blurPreview ? "取消模糊预览" : "模糊预览"}
+                        onClick={toggleBlurPreview}
+                      >
+                        {blurPreview ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                      </IconButton>
+                    </Tooltip>
+                    <SegmentedControl
+                      label="展示方式"
+                      options={[
+                        { value: "cards", label: "卡片" },
+                        { value: "list", label: "列表" },
+                      ]}
+                      value={doneView}
+                      onValueChange={(v) => switchDoneView(v as "cards" | "list")}
+                    />
+                  </>
                 )}
                 <Button onClick={() => setNewDialog(true)}>
                   <Plus className="size-4" />
@@ -221,7 +240,7 @@ export default function App() {
                       icon={<Check className="size-10 opacity-60" />}
                     />
                   ) : (
-                    <TaskGrid tasks={done} onPlay={setPlaying} onRemove={removeTask} />
+                    <TaskGrid tasks={done} onPlay={setPlaying} onRemove={removeTask} blurred={blurPreview} />
                   )
                 ) : (
                   <TaskList

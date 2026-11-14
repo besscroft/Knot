@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/besscroft/knot/internal/engine/httpdl"
+	"github.com/besscroft/knot/internal/proc"
 )
 
 var (
@@ -55,7 +56,7 @@ func version(ctx context.Context, given string) (string, bool) {
 	}
 	c, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(c, given, "--version").Output()
+	out, err := proc.CommandContext(c, given, "--version").Output()
 	if err != nil {
 		return "", false
 	}

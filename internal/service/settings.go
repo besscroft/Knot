@@ -24,6 +24,7 @@ type Settings struct {
 	SniffTypes    []string `json:"sniffTypes"`    // 浏览嗅探允许的资源类型，全量见 AllSniffTypes
 	WebAccess     bool     `json:"webAccess"`     // Web 文件库：允许局域网设备访问（默认仅本机）
 	WebPort       int      `json:"webPort"`       // Web 文件库监听端口
+	CloseToTray   bool     `json:"closeToTray"`   // 关闭窗口时隐藏到系统托盘，下载在后台继续
 }
 
 // DefaultWebPort 是 Web 文件库的默认监听端口（本机与局域网共用）。

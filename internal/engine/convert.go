@@ -4,10 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/besscroft/knot/internal/proc"
 )
 
 // 支持的目标格式：视频容器（流拷贝）与音频格式（从视频提取或重编码）。
@@ -107,7 +108,7 @@ func runFfmpeg(ctx context.Context, ffmpeg, src, dst string, extra []string) err
 	args := []string{"-y", "-hide_banner", "-loglevel", "error", "-i", src}
 	args = append(args, extra...)
 	args = append(args, dst)
-	out, err := exec.CommandContext(c, ffmpeg, args...).CombinedOutput()
+	out, err := proc.CommandContext(c, ffmpeg, args...).CombinedOutput()
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err() // 暂停/取消：保持错误链供 manager 判定
