@@ -41,6 +41,16 @@ jobs:
         with:
           bun-version: latest
 
+      # CI 是全新环境，三处依赖都要装：根（mygo-cli）、extension（wxt）、
+      # frontend（vite 等，mygo build 的 buildCommand 会用到）。三处 bun.lock
+      # 均已提交，CI 下 bun install 自动走 frozen lockfile。
+      - name: Install dependencies
+        shell: bash
+        run: |
+          bun install
+          (cd extension && bun install)
+          (cd frontend && bun install)
+
       - name: Install NSIS (Windows installer)
         if: runner.os == 'Windows'
         run: choco install nsis -y --no-progress
