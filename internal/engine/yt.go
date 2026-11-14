@@ -30,6 +30,7 @@ func (m *Manager) runYt(ctx context.Context, e *entry, t Task) error {
 	}
 	base := strings.TrimSuffix(t.Name, filepath.Ext(t.Name))
 	err = ytdlp.Download(ctx, bin, ytdlp.DownloadOptions{
+		URL:      t.URL,
 		Dir:      t.Dir,
 		Base:     base,
 		Format:   t.Format,

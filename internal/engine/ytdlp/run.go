@@ -20,6 +20,7 @@ const progressMark = "KNP|"
 
 // DownloadOptions 是一次 yt-dlp 下载的装配参数。
 type DownloadOptions struct {
+	URL      string // 视频/音频页面链接（位置参数，必须最后追加）
 	Dir      string // 输出目录（-P）
 	Base     string // 目标文件名（不含扩展名）
 	Format   string // 目标容器/音频格式（mp4/mkv/mov/webm 或 m4a/mp3/opus/flac/wav）
@@ -33,7 +34,8 @@ type DownloadOptions struct {
 
 // DownloadArgs 组装 yt-dlp 下载参数。输出模板固定为 "base.%(ext)s"：
 // 合流容器的扩展名与 Format 一致；个别回退场景（合流回退到渐进式单文件）
-// 扩展名可能漂移，由引擎侧把产物归位到目标路径。
+// 扩展名可能漂移，由引擎侧把产物归位到目标路径。URL 必须是最后一个
+// 位置参数——所有选项都带值，不会吞掉它。
 func DownloadArgs(o DownloadOptions) []string {
 	base := strings.ReplaceAll(o.Base, "%", "%%") // yt-dlp 模板里 % 有特殊语义
 	args := []string{
@@ -60,7 +62,7 @@ func DownloadArgs(o DownloadOptions) []string {
 	if o.Proxy != "" {
 		args = append(args, "--proxy", o.Proxy)
 	}
-	return append(args, "-P", o.Dir, "-o", base+".%(ext)s")
+	return append(args, "-P", o.Dir, "-o", base+".%(ext)s", o.URL)
 }
 
 // Download 执行 yt-dlp 下载（阻塞到进程退出）。ctx 取消会终止进程

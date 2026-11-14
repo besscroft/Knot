@@ -47,7 +47,7 @@ func TestHandleLineIgnoresOtherLines(t *testing.T) {
 
 func TestDownloadArgsVideo(t *testing.T) {
 	args := DownloadArgs(DownloadOptions{
-		Dir: `C:\videos`, Base: "50%off 标题", Format: "mp4",
+		URL: "https://www.youtube.com/watch?v=x&list=PL", Dir: `C:\videos`, Base: "50%off 标题", Format: "mp4",
 		Selector: "299+251/bv*+ba/b", Ffmpeg: `C:\tools\ffmpeg.exe`, Proxy: "http://127.0.0.1:7890",
 	})
 	joined := strings.Join(args, "\x00")
@@ -66,22 +66,33 @@ func TestDownloadArgsVideo(t *testing.T) {
 	if slices.Contains(args, "-x") {
 		t.Errorf("视频格式不应带 -x: %v", args)
 	}
+	// URL 是唯一的无值位置参数，必须最后追加（被任何选项吞掉会直接
+	// 报 "You must provide at least one URL"）。
+	if last := args[len(args)-1]; last != "https://www.youtube.com/watch?v=x&list=PL" {
+		t.Errorf("URL 须为最后一个参数: %v", args)
+	}
 }
 
 func TestDownloadArgsFormatRouting(t *testing.T) {
 	// mov 非原生合流容器：先落 mp4，引擎侧再转换。
-	args := DownloadArgs(DownloadOptions{Dir: ".", Base: "a", Format: "mov", Selector: "b"})
+	args := DownloadArgs(DownloadOptions{URL: "u", Dir: ".", Base: "a", Format: "mov", Selector: "b"})
 	if !slices.Contains(args, "mp4") || slices.Contains(args, "mov") {
 		t.Errorf("mov 应回退 mp4 合流: %v", args)
 	}
+	if args[len(args)-1] != "u" {
+		t.Errorf("URL 须为最后一个参数: %v", args)
+	}
 	// 音频格式走 -x --audio-format。
-	args = DownloadArgs(DownloadOptions{Dir: ".", Base: "a", Format: "mp3", Selector: "ba/b"})
+	args = DownloadArgs(DownloadOptions{URL: "u", Dir: ".", Base: "a", Format: "mp3", Selector: "ba/b"})
 	joined := strings.Join(args, "\x00")
 	if !strings.Contains(joined, "-x\x00--audio-format\x00mp3") {
 		t.Errorf("mp3 应走音频提取: %v", args)
 	}
 	if strings.Contains(joined, "--merge-output-format") {
 		t.Errorf("音频格式不应带合流参数: %v", args)
+	}
+	if args[len(args)-1] != "u" {
+		t.Errorf("URL 须为最后一个参数: %v", args)
 	}
 }
 
