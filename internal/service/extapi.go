@@ -66,13 +66,17 @@ func handleAPICreate(w http.ResponseWriter, r *http.Request) {
 	writeExtTask(w, task)
 }
 
-// extCreateTask 按请求内容分流：B 站播放信息（DASH/旧版 durl）或通用直链。
+// extCreateTask 按请求内容分流：YouTube 链接（yt-dlp 管线）、B 站播放
+// 信息（DASH/旧版 durl）或通用直链。
 func extCreateTask(req *extCreateRequest) (engine.Task, error) {
 	if req.Bili != nil {
 		return createExtBiliTask(req)
 	}
 	if strings.TrimSpace(req.URL) == "" {
 		return engine.Task{}, errors.New("URL 不能为空")
+	}
+	if isYouTubeSite(req.URL) {
+		return createExtYouTubeTask(req)
 	}
 	return createTask(context.Background(), req.URL, CreateOptions{
 		Name:      req.Name,
@@ -81,6 +85,58 @@ func extCreateTask(req *extCreateRequest) (engine.Task, error) {
 		Cookie:    req.Cookie,
 		UserAgent: req.UserAgent,
 	})
+}
+
+// createExtYouTubeTask 把 YouTube 视频页链接交给 yt-dlp 管线（与粘贴链接/
+// 应用内嗅探共用 Tasks.CreateYouTube）；qualityId=0 表示最佳画质。
+// Cookie/UA 无需透传：播放媒体不校验 Referer 防盗链，yt-dlp 自带合适的
+// 请求上下文。
+func createExtYouTubeTask(req *extCreateRequest) (engine.Task, error) {
+	if !isYouTubeVideoPage(req.URL) {
+		return engine.Task{}, errors.New("仅支持 YouTube 单视频链接（播放列表/频道页暂不支持）")
+	}
+	t := Tasks{}
+	return t.CreateYouTube(context.Background(), req.URL, req.QualityID, CreateOptions{
+		Name:   req.Name,
+		Format: req.Format,
+	})
+}
+
+// extResolveRequest 是 POST /api/youtube/resolve 的请求体。
+type extResolveRequest struct {
+	URL string `json:"url"`
+}
+
+// handleAPIYouTubeResolve 解析 YouTube 视频信息，画质清单给插件卡片选择。
+// 与应用内 App.ResolveYouTube 同一管线（解析结果服务端短缓存）；首次使用
+// 会先自动获取 yt-dlp，可能需要等待较久。非 YouTube 链接在进 yt-dlp 前
+// 即被拒绝。
+func handleAPIYouTubeResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if r.Header.Get(extClientHeader) == "" {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
+	var req extResolveRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeExtErr(w, http.StatusBadRequest, "请求体不是合法 JSON")
+		return
+	}
+	info, err := resolveYouTube(r.Context(), strings.TrimSpace(req.URL))
+	if err != nil {
+		writeExtErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(struct {
+		OK   bool        `json:"ok"`
+		Info YouTubeInfo `json:"info"`
+	}{OK: true, Info: ytInfoFrom(info)})
 }
 
 // createExtBiliTask 用插件带来的播放信息创建任务，镜像 BilibiliDownload

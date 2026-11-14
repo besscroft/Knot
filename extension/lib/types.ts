@@ -61,6 +61,28 @@ export interface BiliQuality {
   size: number;
 }
 
+/** 对齐后端 YouTubeQuality（internal/service/youtube.go）。 */
+export interface YouTubeQuality {
+  /** 档位值（短边像素），0 = 最佳。 */
+  id: number;
+  desc: string;
+  codecs?: string;
+  /** 估算字节数，0 = 未知。 */
+  size: number;
+}
+
+/** YouTube 视频解析状态；url 对不上当前视频页即视为过期。 */
+export interface YouTubeState {
+  url: string;
+  ok: boolean;
+  title: string;
+  /** 秒，0 = 未知。 */
+  duration: number;
+  qualities: YouTubeQuality[];
+  /** ok=false 时的失败原因。 */
+  error: string;
+}
+
 /** background 按标签页维护的嗅探状态（chrome.storage.session）。 */
 export interface TabData {
   /** 顶层页面地址，作为发送给 Knot 的 Referer。 */
@@ -68,6 +90,8 @@ export interface TabData {
   sniffs: SniffItem[];
   /** B 站播放信息（内容脚本上报），无则为空。 */
   bili: BiliPayload | null;
+  /** YouTube 解析状态（弹窗打开时按需解析），无则为空。 */
+  youtube: YouTubeState | null;
 }
 
 export interface ExtSettings {
@@ -100,4 +124,6 @@ export type BgRequest =
   | { type: 'send'; tabId: number; items: SniffItem[] }
   | { type: 'sendBili'; tabId: number; qualityId: number; format: string }
   | { type: 'biliPayload'; payload: BiliPayload }
+  | { type: 'resolveYouTube'; tabId: number; url: string; force?: boolean }
+  | { type: 'sendYouTube'; url: string; qualityId: number; format: string }
   | { type: 'ping' };

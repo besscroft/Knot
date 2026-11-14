@@ -216,3 +216,39 @@ func TestAPICreateBiliRejectsForeignReferer(t *testing.T) {
 		t.Fatalf("非 B 站来源状态码 = %d，want 400", rec.Code)
 	}
 }
+
+// YouTube 链接分流进 yt-dlp 管线：非视频页（播放列表等）直接拒绝，
+// 不会去探测页面 HTML，更不会跑 yt-dlp（测试无网络也秒回）。
+func TestAPICreateYouTubeRejectsNonVideoPage(t *testing.T) {
+	newTestEnv(t)
+	body := `{"url":"https://www.youtube.com/playlist?list=PLtest"}`
+	rec := callMedia(t, http.MethodPost, "/api/create", body, true)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("播放列表状态码 = %d，want 400：%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "仅支持") {
+		t.Fatalf("错误信息不明确：%s", rec.Body.String())
+	}
+}
+
+// resolve 端点对非 YouTube 链接立即拒绝（域名校验先于 yt-dlp）。
+func TestAPIYouTubeResolveRejectsForeignURL(t *testing.T) {
+	newTestEnv(t)
+	body := `{"url":"https://example.com/video.mp4"}`
+	rec := callMedia(t, http.MethodPost, "/api/youtube/resolve", body, true)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("状态码 = %d，want 400：%s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "不是 YouTube") {
+		t.Fatalf("错误信息不明确：%s", rec.Body.String())
+	}
+}
+
+// resolve 端点同样要求插件自定义头。
+func TestAPIYouTubeResolveRequiresClientHeader(t *testing.T) {
+	newTestEnv(t)
+	rec := callMedia(t, http.MethodPost, "/api/youtube/resolve", `{"url":"https://youtu.be/x"}`, false)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("无自定义头状态码 = %d，want 403", rec.Code)
+	}
+}

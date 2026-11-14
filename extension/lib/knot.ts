@@ -1,4 +1,4 @@
-import type { BiliPayload, CreateResult, ExtSettings } from './types';
+import type { BiliPayload, CreateResult, ExtSettings, YouTubeQuality } from './types';
 
 export const DEFAULT_SERVER = 'http://127.0.0.1:22333';
 
@@ -65,4 +65,34 @@ export async function createOnKnot(
     throw new Error(data?.error || `Knot 返回异常（HTTP ${res.status}）`);
   }
   return data;
+}
+
+/** /api/youtube/resolve 的响应（对齐后端 YouTubeInfo）。 */
+export interface YouTubeInfo {
+  title: string;
+  /** 秒，0 = 未知。 */
+  duration: number;
+  qualities: YouTubeQuality[];
+}
+
+/** 解析 YouTube 视频信息（画质清单）；失败抛出可直接展示的中文错误。
+ * 解析在 Knot 侧跑 yt-dlp，首次使用会先自动获取二进制，耗时可能较长。 */
+export async function resolveYouTube(serverBase: string, url: string): Promise<YouTubeInfo> {
+  let res: Response;
+  try {
+    res = await fetch(`${serverBase}/api/youtube/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Knot-Client': 'browser-extension' },
+      body: JSON.stringify({ url }),
+    });
+  } catch {
+    throw new Error('无法连接 Knot，请确认应用已运行且地址正确');
+  }
+  const data = (await res.json().catch(() => null)) as
+    | { ok: boolean; error?: string; info?: YouTubeInfo }
+    | null;
+  if (!res.ok || !data?.ok || !data.info) {
+    throw new Error(data?.error || `Knot 返回异常（HTTP ${res.status}）`);
+  }
+  return data.info;
 }

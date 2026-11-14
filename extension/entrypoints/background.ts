@@ -1,7 +1,8 @@
 import { classify, urlName } from '@/lib/classify';
 import * as knot from '@/lib/knot';
 import { dropTabData, loadTabData, resetTabData, saveTabData } from '@/lib/storage';
-import type { BgRequest, SendResult, SniffItem, TabData } from '@/lib/types';
+import type { BgRequest, SendResult, SniffItem, TabData, YouTubeState } from '@/lib/types';
+import { isYouTubeVideoPage } from '@/lib/youtube';
 import { browser, type Browser } from 'wxt/browser';
 
 // 背景（MV3 Service Worker）：嗅探 + 消息路由 + 右键菜单。
@@ -17,12 +18,19 @@ export default defineBackground(() => {
   // ---- 嗅探 ------------------------------------------------------------
 
   // 顶层导航：重置该标签页状态（新页面的嗅探结果与 Referer 全部刷新）。
+  // YouTube 视频页另亮徽标：播放媒体走 SABR/UMP，嗅探层看不见，下载入口
+  // 是弹窗的专用卡片（打开后按需解析）。
   browser.webRequest.onBeforeRequest.addListener(
     (details) => {
       if (details.type !== 'main_frame' || details.tabId < 0) return;
-      void resetTabData(details.tabId, details.url).then(() =>
-        browser.action.setBadgeText({ tabId: details.tabId, text: '' }),
-      );
+      void resetTabData(details.tabId, details.url).then(() => {
+        if (!isYouTubeVideoPage(details.url)) {
+          browser.action.setBadgeText({ tabId: details.tabId, text: '' });
+          return;
+        }
+        void browser.action.setBadgeText({ tabId: details.tabId, text: '•' });
+        void browser.action.setBadgeBackgroundColor({ tabId: details.tabId, color: '#0ea5e9' });
+      });
     },
     { urls: ['<all_urls>'] },
   );
@@ -90,6 +98,41 @@ export default defineBackground(() => {
     });
   }
 
+  // ---- YouTube ---------------------------------------------------------
+
+  // 解析去重：弹窗反复开关会重复触发，同标签页合并为同一次请求。
+  const ytResolving = new Map<number, Promise<YouTubeState>>();
+
+  function resolveYouTubeForTab(tabId: number, url: string, force: boolean): Promise<YouTubeState> {
+    const hit = ytResolving.get(tabId);
+    if (hit) return hit;
+    const p = doResolveYouTube(tabId, url, force).finally(() => ytResolving.delete(tabId));
+    ytResolving.set(tabId, p);
+    return p;
+  }
+
+  /** 调 /api/youtube/resolve 并把结果（含失败）落到标签页状态。
+   * force=false 时同地址直接复用已有结果，避免重复跑 yt-dlp。 */
+  async function doResolveYouTube(tabId: number, url: string, force: boolean): Promise<YouTubeState> {
+    const data = await loadTabData(tabId);
+    if (!force && data.youtube?.url === url) return data.youtube;
+    const state: YouTubeState = { url, ok: false, title: '', duration: 0, qualities: [], error: '' };
+    try {
+      const settings = await knot.loadSettings();
+      const info = await knot.resolveYouTube(settings.serverBase, url);
+      state.ok = true;
+      state.title = info.title;
+      state.duration = info.duration;
+      state.qualities = info.qualities;
+    } catch (err) {
+      state.error = errMsg(err);
+    }
+    const latest = await loadTabData(tabId);
+    latest.youtube = state;
+    saveTabData(tabId);
+    return state;
+  }
+
   // ---- 消息路由 ---------------------------------------------------------
 
   browser.runtime.onMessage.addListener((msg: BgRequest, sender) =>
@@ -155,6 +198,29 @@ export default defineBackground(() => {
         void browser.action.setBadgeText({ tabId, text: '•' });
         void browser.action.setBadgeBackgroundColor({ tabId, color: '#0ea5e9' });
         return { ok: true };
+      }
+      case 'resolveYouTube': {
+        if (!isYouTubeVideoPage(msg.url)) {
+          return { ok: false, error: '当前页面不是 YouTube 视频页' };
+        }
+        const state = await resolveYouTubeForTab(msg.tabId, msg.url, msg.force === true);
+        return { ok: state.ok, state };
+      }
+      case 'sendYouTube': {
+        if (!isYouTubeVideoPage(msg.url)) {
+          return { ok: false, error: '不是 YouTube 视频页链接' };
+        }
+        try {
+          const settings = await knot.loadSettings();
+          await knot.createOnKnot(settings.serverBase, {
+            url: msg.url,
+            qualityId: msg.qualityId,
+            format: msg.format,
+          });
+          return { ok: true };
+        } catch (err) {
+          return { ok: false, error: errMsg(err) };
+        }
       }
       case 'ping': {
         try {

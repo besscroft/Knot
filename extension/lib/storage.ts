@@ -9,7 +9,7 @@ const pending = new Set<number>();
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 
 function emptyData(): TabData {
-  return { pageUrl: '', sniffs: [], bili: null };
+  return { pageUrl: '', sniffs: [], bili: null, youtube: null };
 }
 
 /** 读取标签页状态：先查缓存，未命中再查 session 存储。 */

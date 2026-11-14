@@ -123,6 +123,11 @@ func (a *AppService) ResolveYouTube(ctx context.Context, url string) (YouTubeInf
 	if err != nil {
 		return YouTubeInfo{}, err
 	}
+	return ytInfoFrom(info), nil
+}
+
+// ytInfoFrom 把 yt-dlp 解析结果映射为对外展示的信息（画质清单）。
+func ytInfoFrom(info *ytdlp.Info) YouTubeInfo {
 	out := YouTubeInfo{
 		Title:     info.Title,
 		Duration:  info.Duration,
@@ -133,7 +138,7 @@ func (a *AppService) ResolveYouTube(ctx context.Context, url string) (YouTubeInf
 			ID: q.ID, Desc: q.Desc, Codecs: q.Codecs, Size: q.Size,
 		})
 	}
-	return out, nil
+	return out
 }
 
 // CreateYouTube 把 YouTube 视频加入下载队列：qualityID 为解析返回的画质

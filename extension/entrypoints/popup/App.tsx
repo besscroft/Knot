@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { Settings } from 'lucide-react';
 import BiliCard from './components/BiliCard';
 import ItemRow from './components/ItemRow';
+import YouTubeCard from './components/YouTubeCard';
 import type { BgRequest, ExtSettings, SendResult, SniffItem, TabData } from '@/lib/types';
 
 type Filter = 'all' | 'video' | 'audio' | 'hls' | 'other';
@@ -28,6 +29,9 @@ function send<T>(req: BgRequest): Promise<T> {
 
 export default function App() {
   const [tabId, setTabId] = useState(0);
+  // 实时标签页地址：YouTube 是 SPA，切视频不触发顶层导航，TabData.pageUrl
+  // 会滞后，站点卡片（YouTube）一律以这里为准。
+  const [tabUrl, setTabUrl] = useState('');
   const [data, setData] = useState<TabData | null>(null);
   const [settings, setSettings] = useState<ExtSettings | null>(null);
   const [online, setOnline] = useState<boolean | null>(null);
@@ -41,6 +45,7 @@ export default function App() {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id) return;
       setTabId(tab.id);
+      setTabUrl(tab.url ?? '');
       void send({ type: 'popupOpened', tabId: tab.id }).catch(() => {});
       const res = await send<{ data: TabData; settings: ExtSettings }>({
         type: 'tabData',
@@ -139,8 +144,9 @@ export default function App() {
         </button>
       </header>
 
-      {/* 主体 */}
+      {/* 主体：站点专用卡片（B 站 / YouTube，各自按页面地址显示） */}
       {data && <BiliCard data={data} tabId={tabId} />}
+      {data && <YouTubeCard data={data} tabId={tabId} tabUrl={tabUrl} />}
 
       {/* 过滤 chips */}
       <div className="flex gap-1.5 px-3 pt-2.5">
