@@ -56,6 +56,7 @@ export function SettingsView() {
   const [ext, setExt] = useState<ExtStatus | null>(null);
   const [extBusy, setExtBusy] = useState<string | null>(null);
   const [extHint, setExtHint] = useState<string | null>(null);
+  const [version, setVersion] = useState("");
 
   useEffect(() => {
     App.getSettings()
@@ -75,6 +76,9 @@ export function SettingsView() {
     Ext.status()
       .then(setExt)
       .catch(() => setExt(null));
+    App.getVersion()
+      .then(setVersion)
+      .catch(() => setVersion(""));
   }, []);
 
   // 拉取最新媒体服务地址（监听方式/端口变化重启后调用）。
@@ -471,6 +475,22 @@ export function SettingsView() {
           <p className="text-xs leading-5 text-muted">
             点击关闭按钮时隐藏到系统托盘，下载在后台继续；退出请用托盘菜单。
           </p>
+        </div>
+
+        {/* 关于 */}
+        <div className="flex flex-col gap-2">
+          <div className="text-sm font-medium">关于</div>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm">Knot{version ? ` v${version}` : ""}</p>
+              <p className="text-xs leading-5 text-muted">
+                启动后约 10 秒自动检查更新，之后每天一次；有新版本会弹窗展示更新内容。
+              </p>
+            </div>
+            <Button variant="secondary" onClick={() => void App.checkForUpdate()}>
+              检查更新
+            </Button>
+          </div>
         </div>
 
         {error && (

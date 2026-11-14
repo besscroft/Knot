@@ -73,6 +73,10 @@ jobs:
         run: bun run build -- -platform ${{ matrix.platforms }}
 
       # Windows：安装包直接上传，便携版 exe 压成 zip（runner 自带 7z）。
+      # 同时收集更新器产物：签名更新包 tar.gz、分平台 manifest、delta 增量
+      # （mygo build 产出，官网 Worker 按文件名代理给应用内更新器）。
+      # 产物缺失（如 Secrets 未配 MYGO_UPDATER_PRIVATE_KEY）只警告不阻断，
+      # 照常发布安装包。
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -82,6 +86,13 @@ jobs:
           for arch in amd64 arm64; do
             7z a "release/knot-${VERSION}-windows-${arch}-portable.zip" "build/windows-${arch}/Knot.exe" > /dev/null
             cp build/windows-${arch}/knot-setup-*-"${arch}".exe release/
+            if [ -f "build/windows-${arch}/update-windows-${arch}.json" ]; then
+              cp "build/windows-${arch}/knot-${VERSION}-windows-${arch}.tar.gz" release/
+              cp "build/windows-${arch}/update-windows-${arch}.json" release/
+              cp build/windows-${arch}/knot-*"-to-${VERSION}-windows-${arch}.delta" release/ 2>/dev/null || true
+            else
+              echo "::warning::未找到更新器产物 update-windows-${arch}.json（Secrets 未配置 MYGO_UPDATER_PRIVATE_KEY？）本次只发布安装包"
+            fi
           done
           ls -la release
 
@@ -99,6 +110,13 @@ jobs:
           fi
           cp "$DMG" release/
           ditto -c -k --sequesterRsrc --keepParent build/darwin-universal/Knot.app "release/knot-${VERSION}-macos-universal.zip"
+          if [ -f "build/darwin-universal/update-darwin-universal.json" ]; then
+            cp "build/darwin-universal/knot-${VERSION}-darwin-universal.tar.gz" release/
+            cp "build/darwin-universal/update-darwin-universal.json" release/
+            cp build/darwin-universal/knot-*"-to-${VERSION}-darwin-universal.delta" release/ 2>/dev/null || true
+          else
+            echo "::warning::未找到更新器产物 update-darwin-universal.json（Secrets 未配置 MYGO_UPDATER_PRIVATE_KEY？）本次只发布安装包"
+          fi
           ls -la release
 
       - name: Upload artifacts

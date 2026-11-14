@@ -10,6 +10,7 @@ import (
 
 	"github.com/besscroft/knot/internal/engine"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 )
 
 //go:embed assets/tray.png
@@ -32,6 +33,8 @@ func InitTray(onShow func()) error {
 		// 任务多时不卡菜单线程。
 		{Label: "暂停全部任务", Click: func(*mygo.MenuItem, *mygo.Window) { go pauseAll() }},
 		{Label: "继续全部任务", Click: func(*mygo.MenuItem, *mygo.Window) { go resumeAll() }},
+		// CheckForUpdates 立即返回，更新窗口由插件自己弹出（含结果反馈）。
+		{Label: "检查更新…", Click: func(*mygo.MenuItem, *mygo.Window) { updater.CheckForUpdates() }},
 		mygo.Separator(),
 		{Role: mygo.RoleQuit}, // 标准退出：走 Quit → OnBeforeQuit → service.Shutdown
 	})

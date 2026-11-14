@@ -10,6 +10,13 @@ export default defineConfig({
   devCommand: "cd frontend && bun run dev",
   buildCommand: "cd frontend && bun run build",
   frontendDist: "frontend/dist",
-  bindings: "frontend/src/mygo.ts",
-  out: "build",
+    bindings: "frontend/src/mygo.ts",
+    out: "build",
+    // 应用内更新:manifest 与更新包都经官网 Worker(knot.zzzvoid.com)代理
+    // GitHub Release,解决国内直连超时;私钥在 GitHub Secrets 的
+    // MYGO_UPDATER_PRIVATE_KEY(本机 %AppConfigDir%\mygo\update-keys\)。
+    updates: {
+      publicKey: "UakPUCzR2ShcJsmYYBO3iCaL/T0Ka8HrMJeyRvkO9fw=",
+      url: "https://knot.zzzvoid.com/update",
+    },
 });

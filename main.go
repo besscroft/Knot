@@ -7,6 +7,7 @@ import (
 
 	"github.com/besscroft/knot/internal/service"
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/plugins/updater"
 )
 
 // appName 是应用名：dev 与构建产物都用它（mygo dev 默认用 "<名> Dev"，
@@ -20,6 +21,11 @@ func main() {
 	}
 	// 统一 dev 与构建产物的数据目录，须在 Run 与任何 Path 调用之前。
 	mygo.App.SetName(appName)
+
+	// 应用内更新器：启动约 10 秒后首查、之后每日检查，有新版本弹窗；
+	// 手动入口在托盘菜单与设置页， feed 与公钥来自 mygo.config.ts 的
+	// updates 配置（构建期注入），dev 构建不会后台检查。
+	mygo.Use(updater.Plugin)
 
 	mygo.Bind(&service.Tasks{})
 	mygo.BindAs("App", &service.AppService{})

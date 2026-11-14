@@ -17,9 +17,13 @@
  *   /download/latest/macos            *.dmg(文件名不固定)
  *   /download/latest/macos-zip        knot-<ver>-macos-universal.zip
  *   /download/latest/info             最新版本信息 JSON(供页面展示版本号)
+ *   /update/<文件名>                  按精确文件名代理 release 资产,给 mygo
+ *                                     更新器用(manifest/tar.gz/delta,url 均
+ *                                     编译期为本域,见 Knot 的 mygo.config.ts)
  *
- * 解析失败或找不到目标资产时,降级为 302 跳转 GitHub Releases 页面。
- * 其余请求交给 Workers Assets(静态文件 + SPA fallback)。
+ * /download/* 解析失败或找不到目标资产时,降级为 302 跳转 GitHub Releases
+ * 页面;/update/* 找不到则 404(更新器语义)。其余请求交给 Workers Assets
+ * (静态文件 + SPA fallback)。
  */
 
 const REPO = "besscroft/Knot";
@@ -202,7 +206,33 @@ async function handleDownload(request: Request, pick: (assets: ReleaseAsset[]) =
   if (!asset) {
     return fallbackToReleasesPage();
   }
+  return proxyAsset(request, asset, 300, fallbackToReleasesPage);
+}
 
+function updateFileNotFound(): Response {
+  return new Response(JSON.stringify({ error: "update file not found" }), {
+    status: 404,
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+  });
+}
+
+/** 更新器取件:/update/<文件名>,按精确名在最新 release 里找;404 语义,不做页面降级。 */
+async function handleUpdateFile(request: Request, filename: string): Promise<Response> {
+  if (!/^[\w.-]+$/.test(filename)) {
+    return updateFileNotFound();
+  }
+  const release = await resolveRelease();
+  const asset = release?.assets.find((x) => x.name === filename);
+  if (!asset) {
+    return updateFileNotFound();
+  }
+  // manifest 变更要及时被检查到,缓存从短
+  const isManifest = filename.startsWith("update-") && filename.endsWith(".json");
+  return proxyAsset(request, asset, isManifest ? 60 : 300, updateFileNotFound);
+}
+
+/** 把 release 资产流式代理回客户端;onFail 是上游失败时的降级响应。 */
+async function proxyAsset(request: Request, asset: ReleaseAsset, cacheTtl: number, onFail: () => Response): Promise<Response> {
   // 透传 Range,让下载工具可以断点续传
   const headers: Record<string, string> = { "User-Agent": "knot-website-download-proxy" };
   const range = request.headers.get("Range");
@@ -217,10 +247,10 @@ async function handleDownload(request: Request, pick: (assets: ReleaseAsset[]) =
       headers,
     });
   } catch {
-    return fallbackToReleasesPage();
+    return onFail();
   }
   if (!upstream.ok && upstream.status !== 206) {
-    return fallbackToReleasesPage();
+    return onFail();
   }
 
   const headersOut = new Headers();
@@ -235,7 +265,7 @@ async function handleDownload(request: Request, pick: (assets: ReleaseAsset[]) =
     headersOut.set("Content-Range", contentRange);
   }
   headersOut.set("Accept-Ranges", upstream.headers.get("Accept-Ranges") ?? "bytes");
-  headersOut.set("Cache-Control", "public, max-age=300");
+  headersOut.set("Cache-Control", `public, max-age=${cacheTtl}`);
 
   return new Response(request.method === "HEAD" ? null : upstream.body, {
     status: upstream.status,
@@ -272,6 +302,9 @@ export default {
     const pick = ASSET_ROUTES[pathname];
     if (pick) {
       return handleDownload(request, pick);
+    }
+    if (pathname.startsWith("/update/")) {
+      return handleUpdateFile(request, pathname.slice("/update/".length));
     }
     // 静态资产与 SPA fallback 交给 Workers Assets
     return env.ASSETS.fetch(request);

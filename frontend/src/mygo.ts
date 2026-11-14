@@ -298,6 +298,13 @@ export const App = {
   checkFfmpeg(): Promise<string> {
     return call("App.CheckFfmpeg");
   },
+  /**
+   * CheckForUpdate 按用户意图检查更新:插件会立刻弹出更新窗口并展示结果
+   * (新版本的 release notes / 已是最新 / 失败原因),此调用不阻塞。
+   */
+  checkForUpdate(): Promise<void> {
+    return call("App.CheckForUpdate");
+  },
   /** CheckYtDlp 仅检测本机 yt-dlp（不触发下载），返回路径或空串。 */
   checkYtDlp(): Promise<string> {
     return call("App.CheckYtDlp");
@@ -319,6 +326,10 @@ export const App = {
   /** GetSettings 返回当前设置。 */
   getSettings(): Promise<Settings> {
     return call("App.GetSettings");
+  },
+  /** GetVersion 返回当前应用版本号(mygo.config.ts 的 version,构建期注入)。 */
+  getVersion(): Promise<string> {
+    return call("App.GetVersion");
   },
   /**
    * MediaBase 返回 loopback 媒体服务 base URL（含 token），前端用它拼
