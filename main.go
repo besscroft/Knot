@@ -24,6 +24,7 @@ func main() {
 	mygo.Bind(&service.Tasks{})
 	mygo.BindAs("App", &service.AppService{})
 	mygo.BindAs("Browser", &service.Browser{})
+	mygo.BindAs("Ext", &service.ExtInstaller{})
 
 	mygo.App.WhenReady(func() {
 		// 存储与队列的初始化必须在 WhenReady 里：`mygo generate` 也会运行

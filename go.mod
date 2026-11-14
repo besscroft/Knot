@@ -12,5 +12,6 @@ require (
 	github.com/ebitengine/purego v0.11.1 // indirect
 	github.com/yapingcat/gomedia v0.0.0-20240906162731-17feea57090c // indirect
 	golang.org/x/net v0.59.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

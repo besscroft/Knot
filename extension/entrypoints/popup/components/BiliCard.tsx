@@ -1,0 +1,131 @@
+import { useMemo, useState } from 'react';
+import { Download, Loader2, Tv } from 'lucide-react';
+import { biliQualities } from '@/lib/bili';
+import { fmtSize } from '@/lib/format';
+import type { TabData } from '@/lib/types';
+
+// B 站卡片：与应用内 SniffPanel 的 BilibiliDialog 同一口径 —— DASH 分轨
+// 提供清晰度选择（默认最高），音频格式只提取音轨；旧版 durl 单文件直发。
+const FORMATS = [
+  { value: 'mp4', label: 'MP4 视频' },
+  { value: 'mkv', label: 'MKV 视频' },
+  { value: 'm4a', label: 'M4A 仅音频' },
+  { value: 'mp3', label: 'MP3 仅音频' },
+];
+
+interface Props {
+  data: TabData;
+  tabId: number;
+}
+
+export default function BiliCard({ data, tabId }: Props) {
+  const bili = data.bili;
+  const isBiliPage = /^https?:\/\/(www|m)\.bilibili\.com\/video\//.test(data.pageUrl);
+  const qualities = useMemo(() => (bili ? biliQualities(bili) : []), [bili]);
+  const [qualityId, setQualityId] = useState<number | null>(null);
+  const [format, setFormat] = useState('mp4');
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  const activeQuality = qualityId ?? qualities[0]?.id ?? 0;
+  const audioOnly = format === 'm4a' || format === 'mp3';
+  const title = bili?.title
+    ? bili.pages > 1 && bili.part
+      ? `${bili.title} · ${bili.part}`
+      : bili.title
+    : '';
+
+  if (!bili && isBiliPage) {
+    return (
+      <div className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-400">
+        <Tv className="size-4 shrink-0" />
+        <span>已识别 B 站视频页，等待播放信息…（播放视频或刷新页面后重试）</span>
+      </div>
+    );
+  }
+  if (!bili) return null;
+
+  async function send(): Promise<void> {
+    setSending(true);
+    setResult(null);
+    try {
+      const res = (await browser.runtime.sendMessage({
+        type: 'sendBili',
+        tabId,
+        qualityId: activeQuality,
+        format,
+      })) as { ok: boolean; error?: string };
+      setResult({ ok: res?.ok ?? false, message: res?.ok ? '已发送到 Knot' : res?.error ?? '发送失败' });
+    } catch {
+      setResult({ ok: false, message: '发送失败，请重试' });
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <div className="mx-3 mt-3 rounded-lg border border-neutral-200 bg-white px-3 py-2.5 dark:border-neutral-800 dark:bg-neutral-900">
+      <p className="truncate text-sm font-medium" title={title}>
+        {title || 'B 站视频'}
+      </p>
+      {!bili.dash && (
+        <p className="mt-0.5 text-xs text-neutral-400">旧版单文件模式</p>
+      )}
+      {bili.dash && qualities.length > 0 && (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <label className="min-w-0">
+            <span className="mb-1 block text-xs text-neutral-400">清晰度</span>
+            <select
+              value={activeQuality}
+              disabled={audioOnly}
+              onChange={(e) => setQualityId(Number(e.target.value))}
+              className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs disabled:opacity-40 dark:border-neutral-700 dark:bg-neutral-800"
+            >
+              {qualities.map((q) => (
+                <option key={q.id} value={q.id}>
+                  {q.desc}
+                  {q.size > 0 && ` · ${fmtSize(q.size)}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="min-w-0">
+            <span className="mb-1 block text-xs text-neutral-400">格式</span>
+            <select
+              value={format}
+              onChange={(e) => setFormat(e.target.value)}
+              className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+            >
+              {FORMATS.map((f) => (
+                <option key={f.value} value={f.value}>
+                  {f.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      )}
+      <button
+        type="button"
+        disabled={sending}
+        onClick={() => void send()}
+        className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-sky-500 py-1.5 text-xs font-medium text-white transition hover:bg-sky-600 disabled:opacity-50"
+      >
+        {sending ? (
+          <Loader2 className="size-3.5 animate-spin" />
+        ) : (
+          <Download className="size-3.5" />
+        )}
+        发送到 Knot
+      </button>
+      {result && (
+        <p
+          className={`mt-1.5 truncate text-xs ${result.ok ? 'text-emerald-500' : 'text-red-500'}`}
+          title={result.message}
+        >
+          {result.message}
+        </p>
+      )}
+    </div>
+  );
+}

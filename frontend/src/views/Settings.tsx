@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { App, type Settings as SettingsData } from "../mygo";
+import { App, Ext, type ExtStatus, type Settings as SettingsData } from "../mygo";
 import { Alert } from "../components/arc/alert/alert";
+import { Badge } from "../components/arc/badge/badge";
 import { Button } from "../components/arc/button/button";
 import { Checkbox } from "../components/arc/checkbox/checkbox";
 import { Input } from "../components/arc/input/input";
@@ -23,6 +24,19 @@ const SNIFF_TYPES: { value: string; label: string }[] = [
 const VIDEO_FORMAT_DEFAULT = "__default"; // 「跟随设置」在 Select 里的占位值
 const AUDIO_FORMAT_DEFAULT = "__default";
 
+/** 浏览器插件行状态徽标：未检测 / 手动 / 未安装 / 待信任 / 需更新 / 已安装。 */
+function extBadge(b: ExtStatus["browsers"][number]) {
+  if (!b.detected) return <Badge size="sm" tone="neutral">未检测</Badge>;
+  if (b.manual) return <Badge size="sm" tone="neutral" dot>手动</Badge>;
+  if (b.installed && b.trusted) {
+    return b.upToDate
+      ? <Badge size="sm" tone="success" dot>已安装</Badge>
+      : <Badge size="sm" tone="warning" dot>需更新</Badge>;
+  }
+  if (b.installed) return <Badge size="sm" tone="warning" dot>待信任</Badge>;
+  return <Badge size="sm" tone="info" dot>未安装</Badge>;
+}
+
 /** 设置页：下载目录、分片数、并发数、格式、FFmpeg 与 Web 文件库。
  *  字段用 Arc 的纵向布局（label + description 由控件自带），分组纵向排列。 */
 export function SettingsView() {
@@ -37,7 +51,11 @@ export function SettingsView() {
   const [ytDlpPath, setYtDlpPath] = useState<string | null>(null);
   const [checkingYtDlp, setCheckingYtDlp] = useState(true);
   const [downloadingYtDlp, setDownloadingYtDlp] = useState(false);
+  const [extError, setExtError] = useState<string | null>(null);
   const [webURL, setWebURL] = useState("");
+  const [ext, setExt] = useState<ExtStatus | null>(null);
+  const [extBusy, setExtBusy] = useState<string | null>(null);
+  const [extHint, setExtHint] = useState<string | null>(null);
 
   useEffect(() => {
     App.getSettings()
@@ -54,6 +72,9 @@ export function SettingsView() {
     App.webURL()
       .then(setWebURL)
       .catch(() => setWebURL(""));
+    Ext.status()
+      .then(setExt)
+      .catch(() => setExt(null));
   }, []);
 
   // 拉取最新媒体服务地址（监听方式/端口变化重启后调用）。
@@ -99,6 +120,28 @@ export function SettingsView() {
   async function pickFolder() {
     const dir = await App.pickFolder();
     if (dir) update({ downloadDir: dir });
+  }
+
+  /** 安装/授权/移除插件到指定浏览器，完成后刷新状态。 */
+  async function extAction(id: string, op: "install" | "authorize" | "uninstall") {
+    setExtBusy(id);
+    setExtError(null);
+    setExtHint(null);
+    try {
+      if (op === "install") await Ext.install(id);
+      else if (op === "authorize") await Ext.authorize(id);
+      else await Ext.uninstall(id);
+      setExt(await Ext.status());
+      setExtHint(
+        op === "uninstall"
+          ? "已移除，重启浏览器后扩展消失"
+          : "已生效，浏览器运行中通常几秒内出现（或重启浏览器）；浏览器可能显示「由您的组织管理」标记",
+      );
+    } catch (err) {
+      setExtError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setExtBusy(null);
+    }
   }
 
   async function save() {
@@ -297,6 +340,98 @@ export function SettingsView() {
                 : "开启后同一网络内的设备（如手机）在浏览器输入本机 IP 与端口即可直接访问"
               : `关闭时仅本机可访问 http://127.0.0.1:${data.webPort}/，应用内播放不受影响`}
           </p>
+        </div>
+
+        {/* 浏览器插件 */}
+        <div className="flex flex-col gap-2">
+          <div className="text-sm font-medium">浏览器插件</div>
+          <p className="text-xs leading-5 text-muted">
+            一键把 Knot 插件安装到本机浏览器，日常浏览时即可嗅探资源、右键或弹窗一键回传下载。
+            浏览器运行中通常几秒内自动出现，否则重启浏览器后生效。
+            Chrome/Edge 会把非商店来源的扩展标记为「可能已损坏」并禁用，需「管理员授权」写入本机信任策略放行
+            （浏览器随后可能显示「由您的组织管理」标记）。
+          </p>
+          {ext && (
+            <div className="flex flex-col divide-y divide-border rounded-lg border border-border">
+              {ext.browsers.map((b) => (
+                <div key={b.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="w-32 shrink-0 truncate text-sm">{b.name}</span>
+                  {extBadge(b)}
+                  <div className="flex flex-1 items-center justify-end gap-2">
+                    {!b.detected && (
+                      <span className="text-xs text-muted">本机未安装该浏览器</span>
+                    )}
+                    {b.detected && b.manual && (
+                      <span className="text-xs text-muted">无自动通道，需在扩展页手动加载</span>
+                    )}
+                    {b.detected && !b.manual && (
+                      <>
+                        {b.installed && !b.trusted && (
+                          <span className="text-xs text-muted">需写入信任策略后浏览器才会启用</span>
+                        )}
+                        {b.installed && b.trusted && !b.upToDate && (
+                          <span className="text-xs text-muted">版本待更新</span>
+                        )}
+                        {b.installed && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={extBusy === b.id}
+                            disabled={extBusy !== null}
+                            onClick={() => void extAction(b.id, "uninstall")}
+                          >
+                            移除
+                          </Button>
+                        )}
+                        {b.installed && b.trusted && b.upToDate ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => void Ext.openExtensionsPage(b.id).catch((err) => setExtError(String(err)))}
+                          >
+                            扩展页
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            loading={extBusy === b.id}
+                            disabled={extBusy !== null}
+                            onClick={() => void extAction(b.id, b.installed && !b.trusted ? "authorize" : "install")}
+                          >
+                            {b.installed && !b.trusted ? "管理员授权" : b.installed ? "更新" : "安装"}
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {ext && (
+            <p className="text-xs leading-5 text-muted">
+              版本 {ext.version}（ID {ext.id}）。Firefox 需 Mozilla 签名无自动通道；
+              也可在扩展管理页开启开发者模式后「加载已解压的扩展程序」选择{' '}
+              <button
+                type="button"
+                className="text-accent underline underline-offset-2"
+                onClick={() => void Ext.openDir().catch((err) => setExtError(String(err)))}
+              >
+                unpacked 目录
+              </button>
+              。
+            </p>
+          )}
+          {extHint && !extError && (
+            <Alert tone="success" title="操作成功">
+              {extHint}
+            </Alert>
+          )}
+          {extError && (
+            <Alert tone="danger" title="插件操作失败">
+              {extError}
+            </Alert>
+          )}
         </div>
 
         {/* 嗅探资源类型 */}

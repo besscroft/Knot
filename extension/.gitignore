@@ -1,0 +1,4 @@
+# 构建产物（bundle 后由 pack-crx.mjs 同步到 internal/service/extbundle/ 提交）
+.output/
+.wxt/
+node_modules/

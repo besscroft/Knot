@@ -4,10 +4,13 @@
   "type": "module",
   "scripts": {
     "dev": "mygo dev",
-    "build": "mygo build",
+    "build": "bun run sync:ext && mygo build",
     "generate": "mygo generate",
     "dev:web": "cd frontend && bun run dev",
-    "build:web": "cd frontend && bun run build"
+    "build:web": "cd frontend && bun run build",
+    "dev:ext": "cd extension && bun run dev",
+    "build:ext": "cd extension && bun run build",
+    "sync:ext": "cd extension && bun run bundle"
   },
   "devDependencies": {
     "mygo-cli": "^0.8.0"

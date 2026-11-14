@@ -1,0 +1,16 @@
+@import 'tailwindcss';
+
+/* 插件弹窗：固定尺寸紧凑布局，深浅色跟随系统（Tailwind 默认 dark 变体
+   即 prefers-color-scheme，与 Knot 主应用「跟随系统」的行为一致）。 */
+body {
+  width: 380px;
+  height: 520px;
+  margin: 0;
+  @apply bg-neutral-50 text-neutral-900 antialiased dark:bg-neutral-950 dark:text-neutral-100;
+  font-family:
+    system-ui,
+    -apple-system,
+    'PingFang SC',
+    'Microsoft YaHei',
+    sans-serif;
+}

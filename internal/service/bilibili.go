@@ -382,13 +382,16 @@ func (b *Browser) BilibiliDownload(qualityID int, name, format string) error {
 		_, err := createTask(context.Background(), payload.Durl[0].URL, opt)
 		return err
 	}
-	return createBiliDashTask(payload, qualityID, format, pageURL, name)
+	_, err = createBiliDashTask(payload, qualityID, format, pageURL, name, nil)
+	return err
 }
 
-// createBiliDashTask 从播放信息挑出视频/音频直链并登记 dash 双流任务。
-func createBiliDashTask(p *biliPayload, qualityID int, format, pageURL, name string) error {
+// createBiliDashTask 从播放信息挑出视频/音频直链并登记 dash 双流任务，
+// 返回创建好的任务（供插件 HTTP API 回传）。hdrs 为 nil 时用应用内浏览器
+// 会话的 Cookie/UA；插件走 HTTP API 时自带请求头，直接传入。
+func createBiliDashTask(p *biliPayload, qualityID int, format, pageURL, name string, hdrs *httpdl.Headers) (engine.Task, error) {
 	if mgr == nil || settings == nil {
-		return ErrNotReady
+		return engine.Task{}, ErrNotReady
 	}
 	s := settings.Get()
 
@@ -396,7 +399,7 @@ func createBiliDashTask(p *biliPayload, qualityID int, format, pageURL, name str
 	audioOnly := isAudioFormat(f)
 	if audioOnly {
 		if pickBiliAudio(p) == nil {
-			return errors.New("该视频没有独立音轨，无法提取音频")
+			return engine.Task{}, errors.New("该视频没有独立音轨，无法提取音频")
 		}
 	} else {
 		f = resolveFormat(f, "video", s)
@@ -412,12 +415,14 @@ func createBiliDashTask(p *biliPayload, qualityID int, format, pageURL, name str
 		}
 	}
 	if videoURL == "" {
-		return errors.New("未获取到视频流，请刷新页面后重试")
+		return engine.Task{}, errors.New("未获取到视频流，请刷新页面后重试")
 	}
 
 	// 探测最终地址与大小（CDN 302 到带签名的就近节点；签名有时效，
 	// 下载时 engine 侧还会再验证）。探测失败不阻塞：按未知大小继续。
-	hdrs := &httpdl.Headers{Referer: pageURL, UserAgent: siteUserAgent(), Cookie: cookiesFor(pageURL)}
+	if hdrs == nil {
+		hdrs = &httpdl.Headers{Referer: pageURL, UserAgent: siteUserAgent(), Cookie: cookiesFor(pageURL)}
+	}
 	pctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var firstSize, secondSize int64
@@ -436,7 +441,7 @@ func createBiliDashTask(p *biliPayload, qualityID int, format, pageURL, name str
 
 	dir := s.DownloadDir
 	if err := mkTaskDir(&dir); err != nil {
-		return err
+		return engine.Task{}, err
 	}
 	if name == "" {
 		name = biliDefaultName(p)
@@ -482,8 +487,11 @@ func createBiliDashTask(p *biliPayload, qualityID int, format, pageURL, name str
 		task.AudioURL = ""
 		task.AudioSize = 0
 	}
-	_, err := mgr.Create(task)
-	return err
+	created, err := mgr.Create(task)
+	if err != nil {
+		return engine.Task{}, err
+	}
+	return created, nil
 }
 
 // mkTaskDir 确保下载目录存在（空目录用设置里的下载目录）。

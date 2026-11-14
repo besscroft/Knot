@@ -190,6 +190,18 @@ func mediaHandler(w http.ResponseWriter, r *http.Request) {
 	case len(parts) == 2 && parts[0] == "api" && parts[1] == "list":
 		serveWebList(w, r)
 		return
+	case len(parts) == 2 && parts[0] == "api" && parts[1] == "ping":
+		serveAPIPing(w, r)
+		return
+	case len(parts) == 2 && parts[0] == "api" && parts[1] == "create":
+		handleAPICreate(w, r)
+		return
+	case len(parts) == 2 && parts[0] == "ext" && parts[1] == "updates.xml":
+		serveExtUpdates(w, r)
+		return
+	case len(parts) == 2 && parts[0] == "ext" && parts[1] == "knot-extension.crx":
+		serveExtCrx(w, r)
+		return
 	}
 	if mgr == nil {
 		http.Error(w, "not ready", http.StatusServiceUnavailable)

@@ -72,6 +72,35 @@ export interface DownloadRequest {
   referer: string;
 }
 
+/** extBrowser 是单个浏览器的安装状态。 */
+export interface ExtBrowser {
+  id: string;
+  name: string;
+  /** 本机装了这个浏览器 */
+  detected: boolean;
+  /** 插件已注册到该浏览器 */
+  installed: boolean;
+  /** 已注册且版本与内嵌一致 */
+  upToDate: boolean;
+  /** 信任策略已放行（否则会被浏览器禁用） */
+  trusted: boolean;
+  /** 无自动通道，仅提示手动加载 */
+  manual: boolean;
+}
+
+/** ExtStatus 是插件安装状态总览（Ext.Status 的返回值）。 */
+export interface ExtStatus {
+  browsers: ExtBrowser[];
+  id: string;
+  version: string;
+  /** 插件落盘目录 */
+  dir: string;
+  /** crx3 文件（安装信息指向它） */
+  crxPath: string;
+  /** 解压目录（手动 Load unpacked 兜底） */
+  unpackedDir: string;
+}
+
 /** Preview 是 ParseURL 的结果：新建任务前的探测预览。 */
 export interface Preview {
   url: string;
@@ -410,6 +439,40 @@ export const Browser = {
   /** Stop 停止当前加载。 */
   stop(): Promise<void> {
     return call("Browser.Stop");
+  },
+} as const;
+
+/** ExtInstaller 是暴露给前端的插件安装服务（frontend/src/mygo.ts 中的 Ext.*）。 */
+export const Ext = {
+  /**
+   * Authorize 写入浏览器的信任放行策略（ExtensionInstallAllowlist）。策略键
+   * 受限时自动弹 UAC 提权执行；成功后浏览器重载扩展页/下次启动即启用插件。
+   */
+  authorize(browserID: string): Promise<void> {
+    return call("Ext.Authorize", browserID);
+  },
+  /**
+   * Install 把插件安装到指定浏览器：落盘 crx/解压目录并写入安装信息。
+   * 浏览器运行中通常几秒内热加载，否则下次启动生效。
+   */
+  install(browserID: string): Promise<void> {
+    return call("Ext.Install", browserID);
+  },
+  /** OpenDir 打开插件落盘目录（手动 Load unpacked 时选 unpacked 子目录）。 */
+  openDir(): Promise<void> {
+    return call("Ext.OpenDir");
+  },
+  /** OpenExtensionsPage 打开指定浏览器的扩展管理页（浏览器未运行时会启动它）。 */
+  openExtensionsPage(browserID: string): Promise<void> {
+    return call("Ext.OpenExtensionsPage", browserID);
+  },
+  /** Status 检测本机浏览器与插件安装状态。文件随 Install 落盘，此方法只读。 */
+  status(): Promise<ExtStatus> {
+    return call("Ext.Status");
+  },
+  /** Uninstall 移除指定浏览器的插件注册（浏览器重启后扩展消失）。 */
+  uninstall(browserID: string): Promise<void> {
+    return call("Ext.Uninstall", browserID);
   },
 } as const;
 
