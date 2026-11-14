@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Settings } from 'lucide-react';
 import BiliCard from './components/BiliCard';
 import ItemRow from './components/ItemRow';
+import SaveConfirm from './components/SaveConfirm';
 import YouTubeCard from './components/YouTubeCard';
-import type { BgRequest, ExtSettings, SendResult, SniffItem, TabData } from '@/lib/types';
+import type { BgRequest, ExtSettings, SendItem, SendResult, SniffItem, TabData } from '@/lib/types';
 
 type Filter = 'all' | 'video' | 'audio' | 'hls' | 'other';
 
@@ -39,6 +40,10 @@ export default function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<Record<string, 'sending' | 'ok' | 'error'>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // 文件名确认队列：下载前逐个询问文件名（与应用内嗅探浮窗同一交互），
+  // 确认/跳过到队尾后一次性发送。
+  const [queue, setQueue] = useState<SniffItem[]>([]);
+  const confirmedRef = useRef<SendItem[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -81,6 +86,7 @@ export default function App() {
 
   const visible = useMemo(() => (data?.sniffs ?? []).filter(FILTER_MATCH[filter]), [data, filter]);
   const picked = useMemo(() => data?.sniffs.filter((s) => selected.has(s.url)) ?? [], [data, selected]);
+  const confirming = queue[0];
 
   function toggle(url: string): void {
     setSelected((prev) => {
@@ -91,11 +97,34 @@ export default function App() {
     });
   }
 
-  async function sendSelected(): Promise<void> {
+  /** 开始逐个确认所选资源。 */
+  function startConfirm(): void {
     if (!picked.length) return;
-    setStatus(Object.fromEntries(picked.map((i) => [i.url, 'sending' as const])));
+    confirmedRef.current = [];
+    setQueue(picked);
+  }
+
+  /** 队列推进一格；走完即把确认结果一次性发送。 */
+  function advance(rest: SniffItem[]): void {
+    setQueue(rest);
+    if (rest.length === 0) void sendConfirmed(confirmedRef.current);
+  }
+
+  function confirmCurrent(name: string): void {
+    const cur = queue[0];
+    if (cur) confirmedRef.current.push({ url: cur.url, name });
+    advance(queue.slice(1));
+  }
+
+  function skipCurrent(): void {
+    advance(queue.slice(1));
+  }
+
+  async function sendConfirmed(items: SendItem[]): Promise<void> {
+    if (!items.length) return;
+    setStatus(Object.fromEntries(items.map((i) => [i.url, 'sending' as const])));
     try {
-      const results = await send<SendResult[]>({ type: 'send', tabId, items: picked });
+      const results = await send<SendResult[]>({ type: 'send', tabId, items });
       const nextStatus: Record<string, 'sending' | 'ok' | 'error'> = {};
       const nextErrors: Record<string, string> = {};
       let failed = 0;
@@ -118,7 +147,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       {/* 头部：连接状态 + 设置入口 */}
       <header className="flex items-center gap-2 border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
         <span
@@ -200,12 +229,24 @@ export default function App() {
         <button
           type="button"
           disabled={picked.length === 0 || online === false}
-          onClick={() => void sendSelected()}
+          onClick={startConfirm}
           className="w-full rounded-lg bg-sky-500 py-2 text-sm font-medium text-white transition hover:bg-sky-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
           下载所选{picked.length > 0 ? `（${picked.length}）` : ''}
         </button>
       </footer>
+
+      {/* 文件名确认队列：逐个询问后一次性发送 */}
+      {confirming && (
+        <SaveConfirm
+          key={confirming.url}
+          url={confirming.url}
+          suggested={confirming.name}
+          remaining={queue.length}
+          onConfirm={confirmCurrent}
+          onCancel={skipCurrent}
+        />
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 {
   "name": "knot-extension",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Knot 浏览器插件：嗅探网页资源，一键交给 Knot 下载",
   "private": true,
   "type": "module",

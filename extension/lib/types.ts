@@ -121,9 +121,15 @@ export interface SendResult {
 export type BgRequest =
   | { type: 'tabData'; tabId: number }
   | { type: 'popupOpened'; tabId: number }
-  | { type: 'send'; tabId: number; items: SniffItem[] }
-  | { type: 'sendBili'; tabId: number; qualityId: number; format: string }
+  | { type: 'send'; tabId: number; items: SendItem[] }
+  | { type: 'sendBili'; tabId: number; qualityId: number; format: string; name: string }
   | { type: 'biliPayload'; payload: BiliPayload }
   | { type: 'resolveYouTube'; tabId: number; url: string; force?: boolean }
-  | { type: 'sendYouTube'; url: string; qualityId: number; format: string }
+  | { type: 'sendYouTube'; url: string; qualityId: number; format: string; name: string }
   | { type: 'ping' };
+
+/** 确认后的待发送项；name 为空 = 由 Knot 从链接自动推断。 */
+export interface SendItem {
+  url: string;
+  name?: string;
+}

@@ -160,6 +160,7 @@ export default defineBackground(() => {
           try {
             await knot.createOnKnot(settings.serverBase, {
               url: item.url,
+              name: item.name,
               referer: data.pageUrl,
               cookie: await cookieString(item.url),
               userAgent: navigator.userAgent,
@@ -180,6 +181,7 @@ export default defineBackground(() => {
             bili: data.bili,
             qualityId: msg.qualityId,
             format: msg.format,
+            name: msg.name,
             referer: data.pageUrl,
             cookie: await cookieString(data.pageUrl),
             userAgent: navigator.userAgent,
@@ -216,6 +218,7 @@ export default defineBackground(() => {
             url: msg.url,
             qualityId: msg.qualityId,
             format: msg.format,
+            name: msg.name,
           });
           return { ok: true };
         } catch (err) {

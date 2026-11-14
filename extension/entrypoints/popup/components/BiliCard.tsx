@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Download, Loader2, Tv } from 'lucide-react';
 import { biliQualities } from '@/lib/bili';
 import { fmtSize } from '@/lib/format';
@@ -34,6 +34,13 @@ export default function BiliCard({ data, tabId }: Props) {
       ? `${bili.title} · ${bili.part}`
       : bili.title
     : '';
+  // 文件名预填视频标题（payload 可能二次推送补全，未手动编辑前跟随）；
+  // 留空发送 = 由 Knot 生成默认名。
+  const [name, setName] = useState('');
+  const [nameTouched, setNameTouched] = useState(false);
+  useEffect(() => {
+    if (!nameTouched) setName(title);
+  }, [title]);
 
   if (!bili && isBiliPage) {
     return (
@@ -54,6 +61,7 @@ export default function BiliCard({ data, tabId }: Props) {
         tabId,
         qualityId: activeQuality,
         format,
+        name: name.trim(),
       })) as { ok: boolean; error?: string };
       setResult({ ok: res?.ok ?? false, message: res?.ok ? '已发送到 Knot' : res?.error ?? '发送失败' });
     } catch {
@@ -105,6 +113,22 @@ export default function BiliCard({ data, tabId }: Props) {
           </label>
         </div>
       )}
+      <label className="mt-2 block">
+        <span className="mb-1 block text-xs text-neutral-400">文件名（留空用视频标题）</span>
+        <input
+          value={name}
+          onChange={(e) => {
+            setName(e.target.value);
+            setNameTouched(true);
+          }}
+          onFocus={(e) => e.target.select()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !sending) void send();
+          }}
+          placeholder="由 Knot 自动命名"
+          className="w-full rounded-md border border-neutral-300 bg-white px-2 py-1.5 text-xs dark:border-neutral-700 dark:bg-neutral-800"
+        />
+      </label>
       <button
         type="button"
         disabled={sending}
