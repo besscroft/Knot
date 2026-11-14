@@ -6,6 +6,7 @@ import { defineConfig, lazyPlugins } from "vite-plus";
 export default defineConfig({
   fmt: {},
   lint: {
+    ignorePatterns: [".wrangler"],
     plugins: ["react", "typescript", "oxc"],
     rules: {
       "react/rules-of-hooks": "error",

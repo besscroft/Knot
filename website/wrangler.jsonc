@@ -1,7 +1,10 @@
 {
   "name": "knot",
+  "main": "./worker/index.ts",
   "compatibility_date": "2025-06-01",
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
   }
 }
