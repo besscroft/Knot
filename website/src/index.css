@@ -1,0 +1,180 @@
+@import "tailwindcss";
+
+/*
+ * 设计令牌沿用 Knot 前端的 Arc 体系（frontend/src/components/arc/foundation.css），
+ * accent 取 violet —— 与应用图标 #863bff 同色系。深浅色跟随系统（prefers-color-scheme）。
+ */
+:root {
+  --background: oklch(100% 0 0);
+  --surface-muted: oklch(97.5% 0 0);
+  --raised: oklch(100% 0 0);
+  --foreground: oklch(16% 0 0);
+  --secondary: oklch(38% 0 0);
+  --muted: oklch(52% 0 0);
+  --border: oklch(93.5% 0 0);
+  --border-subtle: oklch(96.5% 0 0);
+  --border-strong: oklch(82% 0 0);
+  --accent: #7747ff;
+  --accent-strong: #5528ce;
+  --accent-subtle: rgb(119 71 255 / 0.13);
+  /* 品牌紫固定不随主题切换：主 CTA 白字需要稳定的深色底。 */
+  --brand: #7747ff;
+  --brand-strong: #5528ce;
+  /* 强 ease-out：入场/离场统一曲线（easings.co strong ease-out）。 */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(19% 0 0);
+    --surface-muted: oklch(26% 0 0);
+    --raised: oklch(24% 0 0);
+    --foreground: oklch(96% 0 0);
+    --secondary: oklch(77% 0 0);
+    --muted: oklch(64% 0 0);
+    --border: oklch(29% 0 0);
+    --border-subtle: oklch(25% 0 0);
+    --border-strong: oklch(40% 0 0);
+    --accent: #a78bff;
+    --accent-strong: #c7b7ff;
+    --accent-subtle: rgb(119 71 255 / 0.22);
+    --brand: #7747ff;
+    --brand-strong: #5528ce;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface-muted: var(--surface-muted);
+  --color-raised: var(--raised);
+  --color-foreground: var(--foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-line: var(--border);
+  --color-line-subtle: var(--border-subtle);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-subtle: var(--accent-subtle);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: var(--accent-subtle);
+  color: var(--accent-strong);
+}
+
+/*
+ * 动效：营销页首访可动，但全部退场路径收敛 —— 只动 transform/opacity，
+ * 高频交互（hover）保持静态反馈，reduce-motion 一律降级为纯 opacity 或无。
+ */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(var(--p, 1));
+  }
+}
+
+/* 首屏入场：一次性 rise，按元素内联 animation-delay 排 stagger。 */
+.enter {
+  animation: rise 500ms var(--ease-out) both;
+}
+
+/* 滚动 reveal：容器进入视口后由 useReveal 加 is-visible，子元素按序 rise。
+   用 animation 而非 transition，避免覆盖子元素自身的 hover 过渡。 */
+.stagger:not(.is-visible) > * {
+  opacity: 0;
+}
+
+.stagger.is-visible > * {
+  animation: rise 500ms var(--ease-out) both;
+}
+
+.stagger.is-visible > *:nth-child(2) {
+  animation-delay: 50ms;
+}
+.stagger.is-visible > *:nth-child(3) {
+  animation-delay: 100ms;
+}
+.stagger.is-visible > *:nth-child(4) {
+  animation-delay: 150ms;
+}
+.stagger.is-visible > *:nth-child(5) {
+  animation-delay: 200ms;
+}
+.stagger.is-visible > *:nth-child(6) {
+  animation-delay: 250ms;
+}
+.stagger.is-visible > *:nth-child(7) {
+  animation-delay: 300ms;
+}
+.stagger.is-visible > *:nth-child(8) {
+  animation-delay: 350ms;
+}
+
+/* 模拟窗口的进度条：scaleX 而非 width（不触发 layout），入场后生长一次。 */
+.bar {
+  transform: scaleX(var(--p, 1));
+  transform-origin: left;
+  animation: grow 1400ms cubic-bezier(0.23, 1, 0.32, 1) 900ms both;
+}
+
+/* 可按压元素：transform 反馈 + 颜色过渡合一，避免 transition 属性互相覆盖。 */
+.pressable {
+  transition:
+    transform 150ms var(--ease-out),
+    background-color 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+
+.pressable:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .enter,
+  .stagger.is-visible > * {
+    animation: fade 200ms ease both;
+  }
+  .bar {
+    animation: none;
+  }
+}
