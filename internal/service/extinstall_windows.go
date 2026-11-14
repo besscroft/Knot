@@ -4,13 +4,17 @@ package service
 
 import (
 	"bytes"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 
 	"github.com/besscroft/knot/internal/proc"
 	"github.com/besscroft/knot/internal/service/extbundle"
@@ -104,8 +108,11 @@ func extDetectBrowsers(info extbundle.Meta) []extBrowser {
 //     确认门，Chrome 强制一次用户确认，无法程序化绕过）：用户在扩展页点
 //     一次「启用」即确认并持久化，之后的版本更新全自动生效。
 // 策略键部分机器 ACL 受限（HKCU\Software\Policies 可能只给 Administrators
-// 写权限）→ 非提权失败即 UAC 提权。Allowlist 只按 ID 标记 kAllowed，不会
-// 拦截用户安装的其他扩展（默认拦截只由 InstallBlocklist "*" 触发）。
+// 写权限，安全软件的「浏览器防护」也常整键锁死）→ 非提权失败即 UAC 提权；
+// 受限机器上本进程往往连键都读不了，所以提权时把序号、写入、校验都放进
+// 提权进程（见 extPolicyInnerScript），本进程读不到键绝不阻断 UAC。
+// Allowlist 只按 ID 标记 kAllowed，不会拦截用户安装的其他扩展（默认拦截
+// 只由 InstallBlocklist "*" 触发）。
 
 // extPolicyPath 浏览器的信任策略键（Chromium 系按 vendor 分 hive）。
 func extPolicyPath(b winBrowser) string {
@@ -168,7 +175,9 @@ func extWritePolicy(b winBrowser) error {
 	return k.SetStringValue(idx, extbundle.Info().ID)
 }
 
-// extAuthorizeBrowser 放行信任策略：先非提权，受限则 UAC 提权执行。
+// extAuthorizeBrowser 放行信任策略：先非提权，受限则 UAC 提权执行。点击
+// 「安装/管理员授权」时才弹 UAC 确认框（用户不想提权可以直接取消），不是
+// 要求整个应用以管理员启动。
 func extAuthorizeBrowser(browserID string) error {
 	b, ok := winFind(browserID)
 	if !ok || b.registryKey == "" {
@@ -180,28 +189,109 @@ func extAuthorizeBrowser(browserID string) error {
 	if err := extWritePolicy(b); err == nil {
 		return nil
 	}
-	// 非提权失败：reg.exe 走 UAC（同一用户提权，HKCU 仍指向本用户）。
-	// powershell 与提权的 reg.exe 均隐藏控制台（-WindowStyle Hidden），
-	// 只让 UAC 确认框出现。
-	idxKey, _, err := registry.CreateKey(registry.CURRENT_USER, extPolicyPath(b), registry.QUERY_VALUE)
-	if err != nil {
-		return fmt.Errorf("无法读取策略键: %w", err)
+	// 非提权失败：走 UAC（同一用户提权，HKCU 仍指向本用户）。旧版这里会
+	// 先在本地读键算序号——键不存在时 CreateKey 也尝试创建、整键被锁时
+	// OpenKey 被拒，两者都会 Access denied，导致 UAC 还没弹就提前报错
+	// 「无法读取策略键」。现在整段写入放进提权进程，本进程读不到键
+	// 也不阻断；全程隐藏控制台（-WindowStyle Hidden），只让 UAC 框出现。
+	code, out := extPolicyElevated(extPolicyInnerScript(extPolicyPSPath(b), extbundle.Info().ID))
+	if code == 0 {
+		return nil
 	}
-	idx, err := extPolicyNextIndex(idxKey)
-	idxKey.Close()
-	if err != nil {
-		return err
+	if code == 1223 { // ERROR_CANCELLED：UAC 确认框被取消（或提权层没能启动）
+		return fmt.Errorf("管理员授权未完成：UAC 确认未通过，可稍后重试")
 	}
-	ps := fmt.Sprintf(
-		`Start-Process reg.exe -ArgumentList 'add','%s','/v','%s','/t','REG_SZ','/d','%s','/f' -Verb RunAs -Wait -WindowStyle Hidden`,
-		extPolicyPath(b), idx, extbundle.Info().ID)
-	if out, err := proc.Command("powershell", "-NoProfile", "-Command", ps).CombinedOutput(); err != nil {
-		return fmt.Errorf("管理员授权未完成: %v: %s", err, strings.TrimSpace(string(out)))
+	detail := strings.TrimSpace(out)
+	if detail == "" {
+		detail = "提权写入失败，可能是安全软件拦截了策略键，可稍后重试"
 	}
-	if !extPolicyTrusted(b, extbundle.Info().ID) {
-		return fmt.Errorf("授权未生效，请重试")
+	return fmt.Errorf("管理员授权未完成（exit %d）: %s", code, detail)
+}
+
+// extPolicyPSPath 策略键的 PowerShell 注册表路径形式（HKCU:\ 前缀）。
+func extPolicyPSPath(b winBrowser) string {
+	return `HKCU:\` + extPolicyPath(b)
+}
+
+// extPolicyInnerScript 提权进程执行的脚本：打开/创建策略键，已放行则幂等
+// 返回；否则按现有数值序号取下一位写入插件 ID 并回读校验。全程不依赖
+// 本进程对策略键的访问权限。
+func extPolicyInnerScript(psPath, id string) string {
+	return fmt.Sprintf(`$p = '%s'
+$id = '%s'
+try {
+  $ErrorActionPreference = 'Stop'
+  $k = Get-Item -LiteralPath $p -ErrorAction SilentlyContinue
+  if (-not $k) { $k = New-Item -Path $p -Force }
+  foreach ($v in @($k.GetValueNames())) {
+    if ($k.GetValue($v) -eq $id) { exit 0 }
+  }
+  $m = 0
+  $n = @($k.GetValueNames() | Where-Object { $_ -match '^[0-9]+$' } | ForEach-Object { [int]$_ })
+  if ($n.Count -gt 0) { $m = ($n | Measure-Object -Maximum).Maximum }
+  $i = [int]$m + 1
+  New-ItemProperty -LiteralPath $p -Name ([string]$i) -Value $id -PropertyType String -Force -ErrorAction Stop | Out-Null
+  if ((Get-Item -LiteralPath $p).GetValue([string]$i) -ne $id) { throw 'verify failed' }
+  exit 0
+} catch {
+  exit 1
+}
+`, psPath, id)
+}
+
+// extPolicyRemoveInnerScript 提权进程执行的删除脚本：清掉所有值为插件 ID
+// 的条目（旧版重复授权可能留下多条同值序号），一次 UAC 全部清完。
+func extPolicyRemoveInnerScript(psPath, id string) string {
+	return fmt.Sprintf(`$p = '%s'
+$id = '%s'
+try {
+  $ErrorActionPreference = 'Stop'
+  $k = Get-Item -LiteralPath $p -ErrorAction Stop
+  foreach ($n in @($k.GetValueNames())) {
+    if ($k.GetValue($n) -eq $id) {
+      Remove-ItemProperty -LiteralPath $p -Name $n -Force -ErrorAction Stop
+    }
+  }
+  exit 0
+} catch {
+  exit 1
+}
+`, psPath, id)
+}
+
+// extPolicyOuterScript 非提权层脚本：Start-Process -Verb RunAs 弹 UAC 起
+// 提权层执行内嵌脚本并 -Wait 等它跑完、回传退出码；取消 UAC（或启动失败）
+// 抛异常时回传 1223。内嵌脚本走 -EncodedCommand（UTF-16LE base64），纯
+// base64 不含引号与空格，绕开两层 powershell 的引号转义。
+func extPolicyOuterScript(inner string) string {
+	enc := base64.StdEncoding.EncodeToString(utf16LE(inner))
+	return fmt.Sprintf(`try { $p = Start-Process powershell -ArgumentList @('-NoProfile','-EncodedCommand','%s') -Verb RunAs -Wait -WindowStyle Hidden -PassThru; if ($p) { if ($null -ne $p.ExitCode) { exit $p.ExitCode } } } catch { exit 1223 }; exit 1`, enc)
+}
+
+// extPolicyElevated 两层 powershell 提权执行内嵌脚本：本进程起隐藏的非提权
+// 层（proc 统一 CREATE_NO_WINDOW），非提权层弹 UAC 起提权层并等待。
+// 返回 (提权层退出码, 非提权层输出)。
+func extPolicyElevated(inner string) (int, string) {
+	out, err := proc.Command("powershell", "-NoProfile", "-Command", extPolicyOuterScript(inner)).CombinedOutput()
+	if err == nil {
+		return 0, ""
 	}
-	return nil
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode(), string(out)
+	}
+	// powershell 本身没跑起来（极端环境），按提权失败处理。
+	return 1, fmt.Sprintf("powershell 启动失败: %v", err)
+}
+
+// utf16LE 编码为 UTF-16LE 字节（-EncodedCommand 的要求）。
+func utf16LE(s string) []byte {
+	us := utf16.Encode([]rune(s))
+	b := make([]byte, 2*len(us))
+	for i, u := range us {
+		binary.LittleEndian.PutUint16(b[2*i:], u)
+	}
+	return b
 }
 
 // extRemovePolicyValue 从策略键移除插件 ID（值受限时同样走 UAC）。
@@ -211,32 +301,33 @@ func extRemovePolicyValue(b winBrowser) error {
 		return nil // 键不存在视为已清理
 	}
 	names, _ := k.ReadValueNames(-1)
-	target := ""
+	targets := make([]string, 0, 1)
 	for _, name := range names {
-		v, _, err := k.GetStringValue(name)
-		if err == nil && v == extbundle.Info().ID {
-			target = name
-			break
+		if v, _, err := k.GetStringValue(name); err == nil && v == extbundle.Info().ID {
+			targets = append(targets, name)
 		}
 	}
 	k.Close()
-	if target == "" {
+	if len(targets) == 0 {
 		return nil
 	}
-	// 先尝试非提权删除。
+	// 先尝试非提权删除（可能多条：旧版重复授权会留下多个同值序号）。
 	if wk, err := registry.OpenKey(registry.CURRENT_USER, extPolicyPath(b), registry.SET_VALUE); err == nil {
-		err = wk.DeleteValue(target)
+		all := true
+		for _, t := range targets {
+			if err := wk.DeleteValue(t); err != nil {
+				all = false
+				break
+			}
+		}
 		wk.Close()
-		if err == nil {
+		if all {
 			return nil
 		}
 	}
-	// 值受限：提权删除（同样全程隐藏控制台）。
-	ps := fmt.Sprintf(
-		`Start-Process reg.exe -ArgumentList 'delete','%s','/v','%s','/f' -Verb RunAs -Wait -WindowStyle Hidden`,
-		extPolicyPath(b), target)
-	if out, err := proc.Command("powershell", "-NoProfile", "-Command", ps).CombinedOutput(); err != nil {
-		return fmt.Errorf("移除信任策略失败: %v: %s", err, strings.TrimSpace(string(out)))
+	// 值受限：提权删除（同样全程隐藏控制台，一次 UAC 清掉全部同值条目）。
+	if code, out := extPolicyElevated(extPolicyRemoveInnerScript(extPolicyPSPath(b), extbundle.Info().ID)); code != 0 {
+		return fmt.Errorf("移除信任策略失败（exit %d）: %s", code, strings.TrimSpace(out))
 	}
 	return nil
 }
