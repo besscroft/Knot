@@ -124,6 +124,7 @@ export type BgRequest =
   | { type: 'send'; tabId: number; items: SendItem[] }
   | { type: 'sendBili'; tabId: number; qualityId: number; format: string; name: string }
   | { type: 'biliPayload'; payload: BiliPayload }
+  | { type: 'biliRefresh'; tabId: number }
   | { type: 'resolveYouTube'; tabId: number; url: string; force?: boolean }
   | { type: 'sendYouTube'; url: string; qualityId: number; format: string; name: string }
   | { type: 'ping' };

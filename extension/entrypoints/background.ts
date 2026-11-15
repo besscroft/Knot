@@ -88,6 +88,16 @@ export default defineBackground(() => {
     }
   }
 
+  /** 标签页实时地址：SPA 站点切页不触发顶层导航，pageUrl 会滞后。 */
+  async function liveTabUrl(tabId: number, fallback: string): Promise<string> {
+    try {
+      const tab = await browser.tabs.get(tabId);
+      return tab.url || fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
   /** 右键菜单发送无需打开 popup，用系统通知反馈结果。 */
   function notify(title: string, message: string): void {
     void browser.notifications.create({
@@ -155,13 +165,16 @@ export default defineBackground(() => {
       case 'send': {
         const settings = await knot.loadSettings();
         const data = await loadTabData(msg.tabId);
+        // B 站等 SPA 站点切页不触发顶层导航，TabData.pageUrl 会滞后，
+        // 防盗链 Referer 一律以标签页实时地址为准。
+        const pageUrl = await liveTabUrl(msg.tabId, data.pageUrl);
         const results: SendResult[] = [];
         for (const item of msg.items) {
           try {
             await knot.createOnKnot(settings.serverBase, {
               url: item.url,
               name: item.name,
-              referer: data.pageUrl,
+              referer: pageUrl,
               cookie: await cookieString(item.url),
               userAgent: navigator.userAgent,
             });
@@ -177,18 +190,28 @@ export default defineBackground(() => {
         if (!data.bili) return { ok: false, error: '未获取到 B 站播放信息，请刷新页面后重试' };
         try {
           const settings = await knot.loadSettings();
+          const pageUrl = await liveTabUrl(msg.tabId, data.pageUrl);
           await knot.createOnKnot(settings.serverBase, {
             bili: data.bili,
             qualityId: msg.qualityId,
             format: msg.format,
             name: msg.name,
-            referer: data.pageUrl,
-            cookie: await cookieString(data.pageUrl),
+            referer: pageUrl,
+            cookie: await cookieString(pageUrl),
             userAgent: navigator.userAgent,
           });
           return { ok: true };
         } catch (err) {
           return { ok: false, error: errMsg(err) };
+        }
+      }
+      case 'biliRefresh': {
+        // 弹窗「重新获取」→ 通知页面里的桥接脚本触发 MAIN world 强拉。
+        try {
+          await browser.tabs.sendMessage(msg.tabId, { type: 'knotBiliRefresh' });
+          return { ok: true };
+        } catch {
+          return { ok: false, error: '无法通知页面脚本，请刷新 B 站页面后重试' };
         }
       }
       case 'biliPayload': {

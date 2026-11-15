@@ -174,7 +174,7 @@ export default function App() {
       </header>
 
       {/* 主体：站点专用卡片（B 站 / YouTube，各自按页面地址显示） */}
-      {data && <BiliCard data={data} tabId={tabId} />}
+      {data && <BiliCard data={data} tabId={tabId} tabUrl={tabUrl} />}
       {data && <YouTubeCard data={data} tabId={tabId} tabUrl={tabUrl} />}
 
       {/* 过滤 chips */}

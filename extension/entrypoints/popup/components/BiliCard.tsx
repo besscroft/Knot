@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Loader2, Tv } from 'lucide-react';
+import { Download, Loader2, RefreshCw, Tv } from 'lucide-react';
 import { biliQualities } from '@/lib/bili';
 import { fmtSize } from '@/lib/format';
 import type { TabData } from '@/lib/types';
@@ -16,11 +16,13 @@ const FORMATS = [
 interface Props {
   data: TabData;
   tabId: number;
+  /** 弹窗打开时的实时标签页地址（SPA 站点 pageUrl 会滞后，识别以它为准）。 */
+  tabUrl?: string;
 }
 
-export default function BiliCard({ data, tabId }: Props) {
+export default function BiliCard({ data, tabId, tabUrl }: Props) {
   const bili = data.bili;
-  const isBiliPage = /^https?:\/\/(www|m)\.bilibili\.com\/video\//.test(data.pageUrl);
+  const isBiliPage = /^https?:\/\/(www|m)\.bilibili\.com\/video\//.test(tabUrl || data.pageUrl);
   const qualities = useMemo(() => (bili ? biliQualities(bili) : []), [bili]);
   const [qualityId, setQualityId] = useState<number | null>(null);
   const [format, setFormat] = useState('mp4');
@@ -42,11 +44,46 @@ export default function BiliCard({ data, tabId }: Props) {
     if (!nameTouched) setName(title);
   }, [title]);
 
+  // 等待态手动重试：通知页面内容脚本立即强拉一次播放信息。
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshErr, setRefreshErr] = useState('');
+  async function refresh(): Promise<void> {
+    setRefreshing(true);
+    setRefreshErr('');
+    try {
+      const res = (await browser.runtime.sendMessage({
+        type: 'biliRefresh',
+        tabId,
+      })) as { ok: boolean; error?: string } | undefined;
+      if (!res?.ok) setRefreshErr(res?.error || '刷新失败，请稍后重试');
+    } catch {
+      setRefreshErr('刷新失败，请刷新 B 站页面后重试');
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
   if (!bili && isBiliPage) {
     return (
-      <div className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-400">
-        <Tv className="size-4 shrink-0" />
-        <span>已识别 B 站视频页，等待播放信息…（播放视频或刷新页面后重试）</span>
+      <div className="mx-3 mt-3 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2.5 text-xs text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-400">
+        <div className="flex items-center gap-2">
+          <Tv className="size-4 shrink-0" />
+          <span>已识别 B 站视频页，正在获取播放信息…</span>
+        </div>
+        {refreshErr && <p className="mt-1.5 text-red-500">{refreshErr}</p>}
+        <button
+          type="button"
+          disabled={refreshing}
+          onClick={() => void refresh()}
+          className="mt-2 flex items-center gap-1.5 rounded-md border border-sky-300 px-2 py-1 font-medium transition hover:bg-sky-100 disabled:opacity-50 dark:border-sky-800 dark:hover:bg-sky-900/40"
+        >
+          {refreshing ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3" />
+          )}
+          重新获取
+        </button>
       </div>
     );
   }
