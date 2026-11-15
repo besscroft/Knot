@@ -25,7 +25,10 @@ func main() {
 	// 应用内更新器：启动约 10 秒后首查、之后每日检查，有新版本弹窗；
 	// 手动入口在托盘菜单与设置页， feed 与公钥来自 mygo.config.ts 的
 	// updates 配置（构建期注入），dev 构建不会后台检查。
+	// 更新源换成官网代理的并行分片下载（国内单连接到 Cloudflare 抖动
+	// 严重，见 service/updatesource.go），manifest 地址不变。
 	mygo.Use(updater.Plugin)
+	mygo.Updater.SetSource(service.NewUpdateSource(nil))
 
 	mygo.Bind(&service.Tasks{})
 	mygo.BindAs("App", &service.AppService{})

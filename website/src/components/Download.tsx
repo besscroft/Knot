@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowDownToLine, Monitor, Apple } from "lucide-react";
 import { useReveal } from "../lib/useReveal";
+import { rangedDownload } from "../lib/rangedDownload";
 
 const REPO = "https://github.com/besscroft/Knot";
 const RELEASES = `${REPO}/releases/latest`;
@@ -31,6 +32,7 @@ const PLATFORMS = [
 export function Download() {
   const panelRef = useReveal<HTMLDivElement>();
   const [version, setVersion] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<{ href: string; pct: number } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -46,6 +48,21 @@ export function Download() {
       cancelled = true;
     };
   }, []);
+
+  // 并行分片下载(见 lib/rangedDownload):点击即开始,失败自动回退普通下载。
+  function startDownload(href: string) {
+    if (downloading) return;
+    setDownloading({ href, pct: 0 });
+    void rangedDownload(href, {
+      onProgress: (pct) => setDownloading({ href, pct }),
+    })
+      .then((ok) => {
+        if (!ok) {
+          window.location.href = href;
+        }
+      })
+      .finally(() => setDownloading(null));
+  }
 
   return (
     <section id="download" className="scroll-mt-20 py-20">
@@ -78,6 +95,10 @@ export function Download() {
                     href={platform.href}
                     className="absolute inset-0 rounded-lg"
                     aria-label={`下载 ${platform.name} 版 Knot`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      startDownload(platform.href);
+                    }}
                   />
                   <div className="flex items-center justify-between">
                     <span className="flex size-10 items-center justify-center rounded-lg bg-accent-subtle">
@@ -94,11 +115,22 @@ export function Download() {
                         key={variant.href}
                         href={variant.href}
                         className="text-muted underline-offset-2 hover:text-accent hover:underline"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          startDownload(variant.href);
+                        }}
                       >
                         {variant.label}
                       </a>
                     ))}
                   </div>
+                  {downloading &&
+                    (platform.href === downloading.href ||
+                      platform.variants.some((v) => v.href === downloading.href)) && (
+                      <div className="relative z-10 mt-1 text-xs text-accent-strong">
+                        分片下载中 {downloading.pct}%
+                      </div>
+                    )}
                 </div>
               ))}
             </div>
