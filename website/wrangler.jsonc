@@ -5,6 +5,10 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    // 浏览器点击下载是导航请求(Sec-Fetch-Mode: navigate),assets 层会
+    // 抢先用 SPA fallback 回 index.html 导致「点击变成刷新」;这两个前缀
+    // 必须强制先进 Worker。
+    "run_worker_first": ["/download/*", "/update/*"]
   }
 }
