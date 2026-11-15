@@ -87,7 +87,9 @@ jobs:
             7z a "release/knot-${VERSION}-windows-${arch}-portable.zip" "build/windows-${arch}/Knot.exe" > /dev/null
             cp build/windows-${arch}/knot-setup-*-"${arch}".exe release/
             if [ -f "build/windows-${arch}/update-windows-${arch}.json" ]; then
-              cp "build/windows-${arch}/knot-${VERSION}-windows-${arch}.tar.gz" release/
+              # tar.gz 按 mygo.config.ts 的版本命名（tag 构建时 sed 已同步），用 glob
+              # 匹配：workflow_dispatch 会跳过版本注入，ref 名是 main，对不上。
+              cp build/windows-${arch}/knot-*"-windows-${arch}.tar.gz" release/
               cp "build/windows-${arch}/update-windows-${arch}.json" release/
               cp build/windows-${arch}/knot-*"-to-${VERSION}-windows-${arch}.delta" release/ 2>/dev/null || true
             else
@@ -111,7 +113,7 @@ jobs:
           cp "$DMG" release/
           ditto -c -k --sequesterRsrc --keepParent build/darwin-universal/Knot.app "release/knot-${VERSION}-macos-universal.zip"
           if [ -f "build/darwin-universal/update-darwin-universal.json" ]; then
-            cp "build/darwin-universal/knot-${VERSION}-darwin-universal.tar.gz" release/
+            cp build/darwin-universal/knot-*"-darwin-universal.tar.gz" release/
             cp "build/darwin-universal/update-darwin-universal.json" release/
             cp build/darwin-universal/knot-*"-to-${VERSION}-darwin-universal.delta" release/ 2>/dev/null || true
           else
